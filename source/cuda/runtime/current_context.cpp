@@ -4,21 +4,21 @@
 #include "cuda/runtime/current_context.hpp"
 
 #include "perimortem/core/diagnostics/log.hpp"
-#include "perimortem/core/null_terminated.hpp"
+#include "perimortem/core/view/null_terminated.hpp"
 
-using namespace Cuda;
-using namespace Perimortem;
+using namespace Cuda::Runtime;
+using namespace Perimortem::Core;
 
-Runtime::CurrentContext::CurrentContext(CUcontext context)
+CurrentContext::CurrentContext(CUcontext context)
     : status(cuCtxPushCurrent(context)) {}
-Runtime::CurrentContext::~CurrentContext() {
+CurrentContext::~CurrentContext() {
   if (status != CUDA_SUCCESS) {
     return;
   }
 
   CUcontext previous;
   if (cuCtxPopCurrent(&previous) != CUDA_SUCCESS) {
-    Core::Diagnostics::Log::fatal(
+    Diagnostics::Log::fatal(
         "CUDA could not restore the caller's current context."_view);
   }
 }

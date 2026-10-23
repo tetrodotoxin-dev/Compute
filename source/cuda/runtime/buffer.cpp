@@ -3,23 +3,27 @@
 
 #include "cuda/runtime/buffer.hpp"
 
+#include "toolchain/memory/lifetime.hpp"
+
 #include "perimortem/core/diagnostics/log.hpp"
-#include "perimortem/core/null_terminated.hpp"
+#include "perimortem/core/view/null_terminated.hpp"
+#include "perimortem/memory/allocator/global.hpp"
+
+#include "ttx/graph/policies/none.h"
+#include "ttx/graph/policies/unknown.h"
 
 #include "cuda/runtime/current_context.hpp"
-#include "ttx/concept/capabilities/borrow.hpp"
 
-using namespace Perimortem;
-using namespace Cuda;
-using Cuda::Runtime::CurrentContext;
-using namespace Ttx::Semantic::Negotiation;
+using namespace Perimortem::Core;
+using namespace Perimortem::Memory;
+using namespace Toolchain::Memory;
+using namespace Cuda::Runtime;
+using namespace Ttx::Graph;
 
-auto Runtime::Buffer::allocate(
-    Program& program,
-    Count size,
-    ttx_borrowed* output) -> ttx_data_status {
-  if (!size) {
-    return TTX_DATA_INVALID;
+auto Buffer::allocate(Program& program, Count size, ttx_retained* output)
+    -> cuda_status {
+  if (!size || !output) {
+    return CUDA_INVALID;
   }
 
   CurrentContext current(program.get_context());
@@ -30,20 +34,18 @@ auto Runtime::Buffer::allocate(
   }
 
   if (status != CUDA_SUCCESS) {
-    return TTX_DATA_IO_ERROR;
+    return CUDA_DRIVER_FAILED;
   }
 
-  static const Core::Object<>::Descriptor descriptor(
-      sizeof(Buffer), alignof(Buffer),
-      [](U8* source) { reinterpret_cast<Buffer*>(source)->~Buffer(); });
-  auto memory = Core::Object<>::create(descriptor).get_payload();
-  auto* buffer =
-      new (memory, Core::Placement::Construct) Buffer(program, address, size);
-  *output = Ttx::Concept::Policies::Borrowed::provide(*buffer).get_abi();
-  return TTX_DATA_SUCCESS;
+  static_assert(alignof(Buffer) <= Allocator::Global::allocation_alignment);
+  auto memory = Allocator::Global::allocate(sizeof(Buffer));
+  auto& buffer = Lifetime::construct<Buffer>(
+      memory.get_data(), [&] { return Buffer(program, address, size); });
+  *output = {&buffer, &retained_operations};
+  return CUDA_SUCCESS_STATUS;
 }
 
-Runtime::Buffer::~Buffer() {
+Buffer::~Buffer() {
   {
     CurrentContext current(program.get_context());
     auto status = current.status;
@@ -52,7 +54,7 @@ Runtime::Buffer::~Buffer() {
     }
 
     if (status != CUDA_SUCCESS) {
-      Core::Diagnostics::Log::fatal(
+      Diagnostics::Log::fatal(
           "CUDA buffer could not release its allocation."_view);
     }
   }
@@ -60,82 +62,149 @@ Runtime::Buffer::~Buffer() {
   program.release();
 }
 
-auto Runtime::Buffer::get_query() const -> ttx_semantic_query {
-  return Ttx::Concept::Abstract::provide(*this).get_query();
+auto Buffer::get_address(void* context) -> U64 {
+  return Data::cast<Buffer>(context)->address;
 }
 
-auto Runtime::Buffer::supports(System::Uuid id) const -> Binding::Status {
-  return id == Ttx::Concept::Capabilities::Borrow::contract_id ||
-                 id == Ttx::Concept::Policies::Borrowed::contract_id ||
-                 id == Contracts::Buffer::contract_id
-             ? Binding::Status::Satisfied
-             : Binding::Status::Unknown;
+auto Buffer::get_size(void* context) -> Count {
+  return Data::cast<Buffer>(context)->size;
 }
 
-auto Runtime::Buffer::borrow() const
-    -> Utility::Result<Ttx::Concept::Policies::Borrowed, Binding::Failure> {
-  Core::Object<>(reinterpret_cast<U8*>(const_cast<Buffer*>(this))).retain();
-  return Ttx::Concept::Policies::Borrowed::provide(*this);
-}
-
-auto Runtime::Buffer::bind_interface(
-    System::Uuid id,
-    Ttx::Data::Form::Storage requested) const -> Binding::Status {
-  using namespace Ttx::Concept;
-  if (id == Capabilities::Borrow::contract_id) {
-    return Binding::provide<Capabilities::Borrow>(
-        Capabilities::Borrow::provide(*this).get_abi(), requested);
+auto Buffer::read(void* context, Count offset, U8* output, Count size)
+    -> cuda_status {
+  const auto& buffer = *Data::cast<Buffer>(context);
+  if (offset > buffer.size || size > buffer.size - offset) {
+    return CUDA_BOUNDS;
   }
-  if (id == Policies::Borrowed::contract_id) {
-    return Binding::provide<Policies::Borrowed>(
-        Policies::Borrowed::provide(*this).get_abi(), requested);
+
+  if (size && !output) {
+    return CUDA_INVALID;
   }
-  if (id != Contracts::Buffer::contract_id) {
-    return Binding::Status::Unknown;
+
+  if (!size) {
+    return CUDA_SUCCESS_STATUS;
   }
-  static const cuda_buffer_ops operations = cuda_buffer_ops(
-      *Abstract::provide(*this).get_abi().operations,
-      [](const void* source) -> U64 {
-        return static_cast<const Buffer*>(source)->address;
-      },
-      [](const void* source) -> Count {
-        return static_cast<const Buffer*>(source)->size;
-      },
-      [](const void* source, Count offset, U8* output,
-         Count size) -> ttx_data_status {
-        const auto& buffer = *static_cast<const Buffer*>(source);
-        if (offset > buffer.size || size > buffer.size - offset) {
-          return TTX_DATA_BOUNDS;
-        }
 
-        CurrentContext current(buffer.program.get_context());
-        if (current.status != CUDA_SUCCESS) {
-          return TTX_DATA_IO_ERROR;
-        }
+  CurrentContext current(buffer.program.get_context());
+  if (current.status != CUDA_SUCCESS) {
+    return CUDA_DRIVER_FAILED;
+  }
 
-        const auto status = cuMemcpyDtoH(output, buffer.address + offset, size);
-        return status == CUDA_SUCCESS ? TTX_DATA_SUCCESS : TTX_DATA_IO_ERROR;
-      },
-      [](const void* source, Count offset,
-         perimortem_view_bytes input) -> ttx_data_status {
-        const auto& buffer = *static_cast<const Buffer*>(source);
-        if (offset > buffer.size || input.size > buffer.size - offset) {
-          return TTX_DATA_BOUNDS;
-        }
-
-        CurrentContext current(buffer.program.get_context());
-        if (current.status != CUDA_SUCCESS) {
-          return TTX_DATA_IO_ERROR;
-        }
-
-        const auto status =
-            cuMemcpyHtoD(buffer.address + offset, input.data, input.size);
-        return status == CUDA_SUCCESS ? TTX_DATA_SUCCESS : TTX_DATA_IO_ERROR;
-      });
-  return Binding::provide<Contracts::Buffer>(
-      cuda_buffer(this, &operations), requested);
+  return cuMemcpyDtoH(output, buffer.address + offset, size) == CUDA_SUCCESS
+             ? CUDA_SUCCESS_STATUS
+             : CUDA_DRIVER_FAILED;
 }
 
-void Runtime::Buffer::release() const {
-  Core::Object<>(reinterpret_cast<U8*>(const_cast<Buffer*>(this))).release();
+auto Buffer::write(void* context, Count offset, perimortem_view_bytes input)
+    -> cuda_status {
+  const auto& buffer = *Data::cast<Buffer>(context);
+  if (offset > buffer.size || input.size > buffer.size - offset) {
+    return CUDA_BOUNDS;
+  }
+
+  if (input.size && !input.data) {
+    return CUDA_INVALID;
+  }
+
+  if (!input.size) {
+    return CUDA_SUCCESS_STATUS;
+  }
+
+  CurrentContext current(buffer.program.get_context());
+  if (current.status != CUDA_SUCCESS) {
+    return CUDA_DRIVER_FAILED;
+  }
+
+  return cuMemcpyHtoD(buffer.address + offset, input.data, input.size) ==
+                 CUDA_SUCCESS
+             ? CUDA_SUCCESS_STATUS
+             : CUDA_DRIVER_FAILED;
+}
+
+const ttx_abstract_ops Buffer::graph_operations = {
+  supports, bind, resolve_route, visit_routes, get_state};
+
+const ttx_retained_ops Buffer::retained_operations = {graph, release_context};
+
+const ttx_retain_ops Buffer::retain_operations = {graph, acquire};
+const cuda_buffer_ops Buffer::operations = {
+  graph, get_address, get_size, read, write};
+
+auto Buffer::graph(void* context) -> ttx_abstract {
+  return {context, &graph_operations};
+}
+
+auto Buffer::supports(void* context, perimortem_uuid id)
+    -> ttx_negotiation_status {
+  const Identity::Uuid contract(id);
+  if (contract == Identity::Uuid(TTX_NONE_ID_HIGH, TTX_NONE_ID_LOW) ||
+      contract == Identity::Uuid(TTX_UNKNOWN_ID_HIGH, TTX_UNKNOWN_ID_LOW)) {
+    return TTX_NEGOTIATION_REJECTED;
+  }
+
+  return contract == Abstract::contract_id ||
+                 contract ==
+                     Identity::Uuid(TTX_RETAIN_ID_HIGH, TTX_RETAIN_ID_LOW) ||
+                 contract == Identity::Uuid(
+                                 TTX_RETAINED_ID_HIGH, TTX_RETAINED_ID_LOW) ||
+                 contract ==
+                     Identity::Uuid(TTX_CUDA_BUFFER_HIGH, TTX_CUDA_BUFFER_LOW)
+             ? TTX_NEGOTIATION_SATISFIED
+             : TTX_NEGOTIATION_UNKNOWN;
+}
+
+auto Buffer::bind(void* context, perimortem_uuid id, void* output)
+    -> ttx_negotiation_status {
+  const auto status = supports(context, id);
+  if (status != TTX_NEGOTIATION_SATISFIED) {
+    return status;
+  }
+
+  const Identity::Uuid contract(id);
+  if (contract == Abstract::contract_id) {
+    *Data::cast<ttx_abstract>(output) = graph(context);
+  } else if (
+      contract == Identity::Uuid(TTX_RETAIN_ID_HIGH, TTX_RETAIN_ID_LOW)) {
+    *Data::cast<ttx_retain>(output) = {context, &retain_operations};
+  } else if (
+      contract == Identity::Uuid(TTX_RETAINED_ID_HIGH, TTX_RETAINED_ID_LOW)) {
+    *Data::cast<ttx_retained>(output) = {context, &retained_operations};
+  } else {
+    *Data::cast<cuda_buffer>(output) = {context, &operations};
+  }
+
+  return TTX_NEGOTIATION_SATISFIED;
+}
+
+auto Buffer::resolve_route(void* context, perimortem_view_bytes route)
+    -> ttx_abstract {
+  return ttx_none();
+}
+
+auto Buffer::visit_routes(void* context, ttx_graph_visitor visitor) -> void {}
+
+auto Buffer::get_state(void* context) -> ttx_abstract_state {
+  return TTX_ABSTRACT_PRESENT;
+}
+
+// Binding preserves the supplying release obligation. Only acquisition adds
+// a reference and grants an independently released duration of use.
+auto Buffer::acquire(void* context, ttx_retained* output)
+    -> ttx_negotiation_status {
+  auto& value = *Data::cast<Buffer>(context);
+  if (value.references == Count(-1)) {
+    return TTX_NEGOTIATION_REJECTED;
+  }
+
+  ++value.references;
+  *output = {context, &retained_operations};
+  return TTX_NEGOTIATION_SATISFIED;
+}
+
+auto Buffer::release_context(void* context) -> void {
+  auto* value = Data::cast<Buffer>(context);
+  if (--value->references == 0) {
+    value->~Buffer();
+    Allocator::Global::release(Data::cast<U8>(value));
+  }
 }

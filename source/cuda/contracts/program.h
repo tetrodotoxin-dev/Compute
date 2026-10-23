@@ -1,53 +1,51 @@
 // # Tetrodotoxin
 // Copyright (c) 2023-present Matt Kaes and contributors
 
-#ifndef TTX_CUDA_CONTRACTS_PROGRAM_H
-#define TTX_CUDA_CONTRACTS_PROGRAM_H
+#ifndef CUDA_CONTRACTS_PROGRAM_H
+#define CUDA_CONTRACTS_PROGRAM_H
+
+#include "ttx/data/form/representation.h"
+#include "ttx/graph/policies/retained.h"
 
 #include "cuda/contracts/diagnostics.h"
-#include "ttx/concept/policies/borrowed.h"
-#include "ttx/data/form/representation.h"
+#include "cuda/contracts/status.h"
 
-#define TTX_CUDA_PROGRAM_HIGH ((U64)0xc1bcf233d4104c0bULL)
-#define TTX_CUDA_PROGRAM_LOW ((U64)0x84f0529809175602ULL)
+#define TTX_CUDA_PROGRAM_HIGH 0xfcdff2fcbe6d4902ULL
+#define TTX_CUDA_PROGRAM_LOW 0x82a51e833740ff97ULL
 
-// Arguments retain their formal boundaries even when their storage could be
-// compacted into one Data range. The author supplies each parameter's complete
-// form and its placement in the host frame. CUDA verifies parameter sizes
-// against the loaded function. The author still owns agreement between source
-// types and these descriptions, just as a native publisher owns its Schema.
-// Device addresses are eight byte CUDA values. They do not grant host access.
+// Each argument supplies a complete canonical form and its offset in the host
+// frame. CUDA verifies parameter counts and sizes against the loaded function.
+// The source author establishes agreement with the device parameter types.
+// Device addresses are eight byte CUDA values, meaningful in that context.
 typedef struct cuda_argument {
   Count offset;
   const ttx_representation* representation;
 } cuda_argument;
 
-// Program keeps its code and CUDA context available. Kernel preparation copies
-// the parameter descriptions and resolves the executable entry once. Both
-// prepare and allocate return Borrowed answers with their own release
-// obligations, retaining the state needed after this Program is released.
-// Operations run serially on their owning worker because a kernel reuses its
-// invocation scratch.
+// Program prepares kernels and allocates device buffers. Each successful
+// operation supplies an independent Retained result whose Abstract binds Kernel
+// or Buffer. Kernels and buffers keep the Program's loaded code and context
+// available after the original Program result is released. Calls on related
+// resources are serialized by the consumer, including retention and release.
 typedef struct cuda_program {
-  const void* source;
+  void* context;
   const struct cuda_program_ops* operations;
 } cuda_program;
 
 typedef struct cuda_program_ops {
-  ttx_abstract_ops abstract;
-  ttx_data_status (*prepare)(
-      const void* source,
+  // Returns to this binding's graph location using a provider supplied record.
+  ttx_abstract (*get_abstract)(void* context);
+  // The caller keeps the canonical frame, argument forms and entry bytes
+  // readable through preparation. The prepared Kernel copies its frame form.
+  cuda_status (*prepare)(
+      void* context,
       perimortem_view_bytes entry,
       const ttx_representation* frame,
       const cuda_argument* arguments,
       Count count,
       cuda_diagnostics diagnostics,
-      ttx_borrowed* output);
-  ttx_data_status (
-      *allocate)(const void* source, Count size, ttx_borrowed* output);
+      ttx_retained* output);
+  cuda_status (*allocate)(void* context, Count size, ttx_retained* output);
 } cuda_program_ops;
-
-// C consumers can request the same prepared API form as the C++ facade.
-C_LINKAGE const ttx_representation* cuda_program_representation(void);
 
 #endif

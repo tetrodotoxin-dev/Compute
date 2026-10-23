@@ -3,56 +3,44 @@
 
 #pragma once
 
-#include "cuda/contracts/kernel.h"
-#include "ttx/concept/policies/borrowed.hpp"
+#include "ttx/data/form/storage.hpp"
+#include "ttx/graph/abstract.hpp"
 
-TTX_DATA_RECORD(
-    cuda_launch,
-    TTX_DATA_MEMBER(cuda_launch, grid_x),
-    TTX_DATA_MEMBER(cuda_launch, grid_y),
-    TTX_DATA_MEMBER(cuda_launch, grid_z),
-    TTX_DATA_MEMBER(cuda_launch, block_x),
-    TTX_DATA_MEMBER(cuda_launch, block_y),
-    TTX_DATA_MEMBER(cuda_launch, block_z),
-    TTX_DATA_MEMBER(cuda_launch, shared_bytes));
-TTX_DATA_RECORD(
-    cuda_kernel_ops,
-    TTX_DATA_MEMBER(cuda_kernel_ops, abstract),
-    TTX_DATA_MEMBER(cuda_kernel_ops, launch));
-TTX_DATA_RECORD(
-    cuda_kernel,
-    TTX_DATA_MEMBER(cuda_kernel, source),
-    TTX_DATA_MEMBER(cuda_kernel, operations));
+#include "cuda/contracts/execution_status.hpp"
+#include "cuda/contracts/kernel.h"
 
 namespace Cuda::Contracts {
 
-// A retained kernel uses the agreed frame directly. Geometry and values may
-// change between calls without recompiling or rediscovering the kernel.
-class Kernel : public Ttx::Concept::Abstract {
+// Kernel launches a prepared entry and waits for completion. Argument storage
+// and referenced device allocations must remain accessible until launch
+// returns. The consumer serializes launches on the same Kernel.
+class Kernel {
  public:
-  static constexpr auto contract_id =
-      Perimortem::System::Uuid(TTX_CUDA_KERNEL_HIGH, TTX_CUDA_KERNEL_LOW);
-
   using Api = cuda_kernel;
-  using Operations = cuda_kernel_ops;
-  explicit constexpr Kernel(Api api)
-      : Abstract(api.source, api.operations->abstract) {}
-  static auto accept(Api value) -> Bool {
-    return value.operations &&
-           Abstract::accept(
-               ttx_abstract(value.source, &value.operations->abstract)) &&
-           value.operations->launch;
+  static constexpr auto contract_id = Perimortem::Core::Identity::Uuid(
+      TTX_CUDA_KERNEL_HIGH,
+      TTX_CUDA_KERNEL_LOW);
+
+  // Explicit construction accepts the complete C record established by its
+  // supplying contract. Copies keep that context and table paired and share
+  // the original access duration.
+  explicit constexpr Kernel(Api api) : api(api) {}
+  constexpr auto get_abi() const -> Api { return api; }
+
+  // The returned Abstract represents the graph location that supplied this
+  // Kernel API. The provider supplies its complete context and operations.
+  auto get_abstract() const -> Ttx::Graph::Abstract {
+    return Ttx::Graph::Abstract(api.operations->get_abstract(api.context));
   }
-  auto get_abi() const -> Api {
-    const auto value = Abstract::get_abi();
-    return Api(
-        value.source, reinterpret_cast<const Operations*>(value.operations));
-  }
+
   auto launch(cuda_launch geometry, Ttx::Data::Form::Storage arguments) const
-      -> Ttx::Data::Status {
-    return static_cast<Ttx::Data::Status>(get_abi().operations->launch(
-        get_abi().source, geometry, arguments.get_abi()));
+      -> ExecutionStatus {
+    return ExecutionStatus(
+        api.operations->launch(api.context, geometry, arguments.get_abi()));
   }
+
+ private:
+  Api api;
 };
 
 }  // namespace Cuda::Contracts

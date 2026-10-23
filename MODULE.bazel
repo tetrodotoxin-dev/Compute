@@ -1,49 +1,85 @@
 module(
-    name = "ttx_cuda",
-    version = "0.2.0",
+    name = "cuda",
+    version = "0.4.0",
 )
 
 bazel_dep(name = "rules_cc", version = "0.2.17")
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "rules_pkg", version = "1.3.0")
-
-cuda = use_extension("//build:sdk.bzl", "dependencies")
-use_repo(cuda, "cuda_cudart_linux", "cuda_cudart_windows", "cuda_nvrtc_linux", "cuda_nvrtc_windows", "libcufft_linux", "libcufft_windows")
-
-bazel_dep(name = "tetro_toolchain", version = "0.2.1")
+bazel_dep(name = "tetro_toolchain", version = "0.4.1")
 archive_override(
     module_name = "tetro_toolchain",
-    sha256 = "eea7461fb783d2b87a638c4ce1c8d9cbee73e54c90259516ca73cd7e850bdc0f",
-    urls = ["https://github.com/tetrodotoxin-dev/Toolchain/releases/download/v0.2.1/tetro_toolchain-0.2.1-source.tar.gz"],
+    sha256 = "9b501a36786fdb96f0708135cff7a62a1178fef66d245a4acae22dd2dd657ae6",
+    urls = ["https://github.com/tetrodotoxin-dev/Toolchain/releases/download/v0.4.1/tetro_toolchain-0.4.1-source.tar.gz"],
 )
 
-register_toolchains("@tetro_toolchain//:cc_toolchain_for_linux_x86_64", "@tetro_toolchain//:cc_toolchain_for_wasm32", "@tetro_toolchain//:cc_toolchain_for_windows_x64")
+register_toolchains("@tetro_toolchain//:cc_toolchain_for_linux_x86_64", "@tetro_toolchain//:cc_toolchain_for_wasm32", "@tetro_toolchain//:cc_toolchain_for_wasm32_runner", "@tetro_toolchain//:cc_toolchain_for_windows_x64")
 
-sdks = use_extension("@tetro_toolchain//:sdk.bzl", "dependencies")
+sdks = use_extension("@tetro_toolchain//source/bazel:sdk.bzl", "dependencies")
+
+_PERIMORTEM_ARCHIVES = {
+    "headers": "a5a474fa6548f0e0bb810213bd76760b8ad9d602ee99d35b6f3f884f85f05f98",
+    "linux-x86_64-v3-static": "a81ebd1c1194012f3149e88a0e52228e341fecc4125279b195ad3b58e4124e5e",
+    "linux-x86_64-v3-shared": "f1cec0d68f49dd1e682188cefca7589f245ea91bf786dada57899eac2a124dab",
+    "windows-x86_64-msvc-static": "0e5b4c45a96a85806a3596aef75493894f0eec0a74e7df16657f2c4d7c13cbbb",
+    "windows-x86_64-msvc-shared": "ea1f94b27941ec054ec055f8540952b894cbd1435279c974e599df60304d494a",
+    "wasm32-emscripten-static": "cd12c04c5e418599bd4d08e54116afbaba99f571f340db68f2bd158dc62dd677",
+    "wasm32-emscripten-shared": "ba1bf3dc7bdf7d9fbfd4071761d342fa03f378225b55e1e60d78d67765408534",
+}
+
 sdks.release(
     name = "perimortem",
-    archives = {
-        "headers": "2bb19a82ceb2dd06a122fb51142e96fd13d52fd5ed323b8a662cb640082636ed",
-        "linux-x86_64-v3": "f62c3b71c9c5f554467c9dc03237073fc34d670fa596aa9cd99972dabfb2e653",
-        "windows-x86_64-msvc": "543763f2a684bc410e264f60115a13cc92b20ae12ae25a9c5294c685f9d06d94",
-        "wasm32-emscripten": "7c33f010c47932503f3ef8dcbddf3e4520a34b9e0bac70514a0cb38117400c42",
-    },
+    archives = _PERIMORTEM_ARCHIVES,
+    linkage = "shared",
     project = "Perimortem",
-    version = "0.1.0",
+    version = "0.4.0",
     deps = [],
 )
-use_repo(sdks, "perimortem")
+sdks.release(
+    name = "perimortem_static",
+    archives = _PERIMORTEM_ARCHIVES,
+    library = "perimortem",
+    linkage = "static",
+    project = "Perimortem",
+    version = "0.4.0",
+    deps = [],
+)
+use_repo(sdks, "perimortem", "perimortem_static")
+
+_CUDA_TTX_ARCHIVES = {
+    "headers": "ed5679ead2b98b1aa4f1c1fee54ea573cc94bc80e5a44e9001d9c3a51cd69c28",
+    "linux-x86_64-v3-shared": "f422ee5d3c8d0240d46db6d3745cc35272bd6fee18b711930caaecfbd11d6c4e",
+    "linux-x86_64-v3-static": "cc79a309ca2bbc520a2f560b78e4833a639e7d79049482642da50ee2b7cd2d09",
+    "windows-x86_64-msvc-shared": "d31b259515435cbf6669f4e964197f4b3bec433d4f163b22606c4d780ef9d029",
+    "windows-x86_64-msvc-static": "c622909c02f5a02e42d6d8c427689fdaf7b76f120a0b0a4b7506e9804e4b6e8f",
+    "wasm32-emscripten-shared": "989d1aa3a79a50c5c789312be1c2dc716a3bc1590048d68dd13e2abfd5d5bfe0",
+    "wasm32-emscripten-static": "186184571ac85c546dbb1922c8cbc57b14d0c0c8c35700d06fbcdbab477d7ce3",
+}
 
 sdks.release(
     name = "ttx",
-    archives = {
-        "headers": "b29fc0774de7631a94042a9fc0f08e8a537366b380403d714133ee014bdaedfa",
-        "linux-x86_64-v3": "0214ef3b44b52ec10c1c112d62feb4656771f0d8886303756ec47b847e3489cb",
-        "windows-x86_64-msvc": "2058106e0a0458f6ed322b9288ad0ed6f3d57f550b64bc7c342e6bbc526a8346",
-        "wasm32-emscripten": "997213f7564763ca5a496804d62b41b494515ae8a6adee91739b5bd64d7ee699",
-    },
+    archives = _CUDA_TTX_ARCHIVES,
+    linkage = "shared",
     project = "TTX",
-    version = "0.2.0",
-    deps = ["@perimortem"],
+    version = "0.4.0",
+    deps = [
+        "@perimortem//:core",
+        "@perimortem//:memory",
+    ],
 )
-use_repo(sdks, "ttx")
+sdks.release(
+    name = "ttx_static",
+    archives = _CUDA_TTX_ARCHIVES,
+    library = "ttx",
+    linkage = "static",
+    project = "TTX",
+    version = "0.4.0",
+    deps = [
+        "@perimortem_static//:core",
+        "@perimortem_static//:memory",
+    ],
+)
+use_repo(sdks, "ttx", "ttx_static")
+
+cuda = use_extension("//build:sdk.bzl", "dependencies")
+use_repo(cuda, "cuda_cudart_linux", "cuda_cudart_windows", "cuda_nvrtc_linux", "cuda_nvrtc_windows", "libcufft_linux", "libcufft_windows")

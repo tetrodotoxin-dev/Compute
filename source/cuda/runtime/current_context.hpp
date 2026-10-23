@@ -5,6 +5,8 @@
 
 #include <cuda.h>
 
+#include "toolchain/toolchain.h"
+
 namespace Cuda::Runtime {
 
 // The application may enter this provider with another CUDA context current.
@@ -13,8 +15,8 @@ namespace Cuda::Runtime {
 // allowing callers to report acquisition failure without disturbing host state.
 class CurrentContext {
  public:
-  explicit CurrentContext(CUcontext);
-  ~CurrentContext();
+  EXPORTED(CUDA) explicit CurrentContext(CUcontext context);
+  EXPORTED(CUDA) ~CurrentContext();
   CurrentContext(const CurrentContext&) = delete;
   auto operator=(const CurrentContext&) -> CurrentContext& = delete;
   const CUresult status;

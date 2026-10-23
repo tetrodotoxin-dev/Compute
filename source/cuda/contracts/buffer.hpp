@@ -3,68 +3,55 @@
 
 #pragma once
 
-#include "cuda/contracts/buffer.h"
-#include "ttx/concept/abstract.hpp"
-#include "ttx/concept/policies/borrowed.hpp"
+#include "perimortem/core/access/bytes.hpp"
 
-TTX_DATA_RECORD(
-    cuda_buffer_ops,
-    TTX_DATA_MEMBER(cuda_buffer_ops, abstract),
-    TTX_DATA_MEMBER(cuda_buffer_ops, address),
-    TTX_DATA_MEMBER(cuda_buffer_ops, size),
-    TTX_DATA_MEMBER(cuda_buffer_ops, read),
-    TTX_DATA_MEMBER(cuda_buffer_ops, write));
-TTX_DATA_RECORD(
-    cuda_buffer,
-    TTX_DATA_MEMBER(cuda_buffer, source),
-    TTX_DATA_MEMBER(cuda_buffer, operations));
+#include "ttx/graph/abstract.hpp"
+
+#include "cuda/contracts/buffer.h"
+#include "cuda/contracts/execution_status.hpp"
 
 namespace Cuda::Contracts {
 
-// Buffer exposes a CUDA address and explicit host transfers. Calling address
-// observes device coordinates and never materializes a host representation.
-class Buffer : public Ttx::Concept::Abstract {
+// Buffer supplies a device address and bounded host transfers. The address
+// remains usable while the supplying Retained result remains accessible.
+class Buffer {
  public:
-  static constexpr auto contract_id =
-      Perimortem::System::Uuid(TTX_CUDA_BUFFER_HIGH, TTX_CUDA_BUFFER_LOW);
-
   using Api = cuda_buffer;
-  using Operations = cuda_buffer_ops;
-  explicit constexpr Buffer(Api api)
-      : Abstract(api.source, api.operations->abstract) {}
-  static auto accept(Api value) -> Bool {
-    return value.operations &&
-           Abstract::accept(
-               ttx_abstract(value.source, &value.operations->abstract)) &&
-           value.operations->address && value.operations->size &&
-           value.operations->read && value.operations->write;
+  static constexpr auto contract_id = Perimortem::Core::Identity::Uuid(
+      TTX_CUDA_BUFFER_HIGH,
+      TTX_CUDA_BUFFER_LOW);
+
+  // Explicit construction accepts the complete C record established by its
+  // supplying contract. Copies keep that context and table paired and share
+  // the original access duration.
+  explicit constexpr Buffer(Api api) : api(api) {}
+  constexpr auto get_abi() const -> Api { return api; }
+
+  // The returned Abstract represents the graph location that supplied this
+  // Buffer API. The provider supplies its complete context and operations.
+  auto get_abstract() const -> Ttx::Graph::Abstract {
+    return Ttx::Graph::Abstract(api.operations->get_abstract(api.context));
   }
-  auto get_abi() const -> Api {
-    const auto value = Abstract::get_abi();
-    return Api(
-        value.source, reinterpret_cast<const Operations*>(value.operations));
-  }
+
   auto get_address() const -> U64 {
-    return get_abi().operations->address(get_abi().source);
+    return api.operations->address(api.context);
   }
-  auto get_size() const -> Count {
-    return get_abi().operations->size(get_abi().source);
-  }
+
+  auto get_size() const -> Count { return api.operations->size(api.context); }
+
   auto read(Count offset, Perimortem::Core::Access::Bytes output) const
-      -> Ttx::Data::Status {
-    return static_cast<Ttx::Data::Status>(get_abi().operations->read(
-        get_abi().source, offset, output.get_data(), output.get_size()));
+      -> ExecutionStatus {
+    return ExecutionStatus(api.operations->read(
+        api.context, offset, output.get_data(), output.get_size()));
   }
 
   auto write(Count offset, Perimortem::Core::View::Bytes input) const
-      -> Ttx::Data::Status {
-    return static_cast<Ttx::Data::Status>(get_abi().operations->write(
-        get_abi().source, offset,
-        {
-          input.get_data(),
-          input.get_size(),
-        }));
+      -> ExecutionStatus {
+    return ExecutionStatus(api.operations->write(api.context, offset, input));
   }
+
+ private:
+  Api api;
 };
 
 }  // namespace Cuda::Contracts

@@ -22,7 +22,15 @@ exports_files(["LICENSE"])
 cc_library(name = "headers", hdrs = glob(["include/**/*.h"]), includes = ["include"], deps = %s)
 """
 
+# Bazel supplies the extension context. Package selection uses the pinned
+# target inventory independently of that context.
+# buildifier: disable=unused-variable
 def _dependencies(ctx):
+    """Declare independent NVIDIA repositories for each native target.
+
+    Args:
+        ctx: Module extension context. Package versions come from _PACKAGES.
+    """
     for component, (version, linux_sha, windows_sha) in _PACKAGES.items():
         for platform, checksum in [("linux", linux_sha), ("windows", windows_sha)]:
             windows = platform == "windows"

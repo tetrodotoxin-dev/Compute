@@ -2,4 +2,4 @@
 /bazel-*/
 MODULE.bazel.lock
 .bazelrc.local
-/.vscode/c_cpp_properties.json
+/.vscode/

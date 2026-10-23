@@ -1,20 +1,20 @@
 // # Tetrodotoxin
 // Copyright (c) 2023-present Matt Kaes and contributors
 
-#ifndef TTX_CUDA_CONTRACTS_COMPILER_H
-#define TTX_CUDA_CONTRACTS_COMPILER_H
+#ifndef CUDA_CONTRACTS_COMPILER_H
+#define CUDA_CONTRACTS_COMPILER_H
+
+#include "ttx/graph/policies/retained.h"
 
 #include "cuda/contracts/diagnostics.h"
-#include "ttx/concept/policies/borrowed.h"
+#include "cuda/contracts/status.h"
 
-#define TTX_CUDA_COMPILER_HIGH ((U64)0xc1bcf233d4104c0bULL)
-#define TTX_CUDA_COMPILER_LOW ((U64)0x84f0529809175601ULL)
+#define TTX_CUDA_COMPILER_HIGH 0x0aedfc870b994df5ULL
+#define TTX_CUDA_COMPILER_LOW 0xa8b09c6793e8b69aULL
 
-// The host supplies source bytes and named includes, allowing the compiler to
-// serve applications and toolchains with their own resource paths. Those inputs
-// remain available through compile. Success returns a Borrowed Program whose
-// caller releases it after use. Failure reports source errors through the
-// diagnostic sink.
+// Source supplies a name and text for NVRTC. Names, source, includes and
+// options contain UTF 8 bytes without embedded nulls. The caller keeps every
+// input range and array readable until compilation returns.
 typedef struct cuda_source {
   perimortem_view_bytes name;
   perimortem_view_bytes text;
@@ -29,21 +29,25 @@ typedef struct cuda_compile_request {
   S32 device;
 } cuda_compile_request;
 
+// Compiler builds source for the selected device. A successful compile call
+// supplies a Retained result whose Abstract binds Program. The consumer
+// releases that result after its final use. Compilation failure leaves earlier
+// results usable. The host keeps the provider library loaded through every
+// result's release.
 typedef struct cuda_compiler {
-  const void* source;
+  void* context;
   const struct cuda_compiler_ops* operations;
 } cuda_compiler;
 
 typedef struct cuda_compiler_ops {
-  ttx_abstract_ops abstract;
-  ttx_data_status (*compile)(
-      const void* source,
+  // Returns the graph location that supplied this Compiler binding. The
+  // provider publishes the returned Abstract's own context and operations.
+  ttx_abstract (*get_abstract)(void* context);
+  cuda_status (*compile)(
+      void* context,
       cuda_compile_request request,
       cuda_diagnostics diagnostics,
-      ttx_borrowed* output);
+      ttx_retained* output);
 } cuda_compiler_ops;
-
-// C consumers can request the same prepared API form as the C++ facade.
-C_LINKAGE const ttx_representation* cuda_compiler_representation(void);
 
 #endif

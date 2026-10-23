@@ -3,58 +3,67 @@
 
 #pragma once
 
-#include "perimortem/memory/dynamic/bytes.hpp"
-#include "perimortem/memory/dynamic/vector.hpp"
+#include "perimortem/memory/global/bytes.hpp"
+#include "perimortem/memory/global/vector.hpp"
 
 #include "cuda/contracts/kernel.hpp"
 #include "cuda/runtime/program.hpp"
 
 namespace Cuda::Runtime {
 
-// Kernel retains the resolved entry and copied frame description. Preparing
-// argument offsets once avoids driver name lookup and allocations at launch.
-// Its argument pointer scratch belongs to this synchronous, serialized owner.
+// Kernel retains its Program and an independent copy of the argument form.
+// Preparation resolves the CUDA entry and allocates argument pointer scratch.
+// Launches reuse that scratch, so the consumer serializes calls through all
+// bindings of this Kernel, including bindings acquired by separate retention.
 class Kernel {
  public:
-  static auto prepare(
+  Kernel(const Kernel&) = delete;
+  auto operator=(const Kernel&) -> Kernel& = delete;
+  static EXPORTED(CUDA) auto prepare(
       Program& program,
       perimortem_view_bytes entry,
       const ttx_representation& frame,
       const cuda_argument* arguments,
       Count count,
       cuda_diagnostics diagnostics,
-      ttx_borrowed* output) -> ttx_data_status;
-  auto get_query() const -> ttx_semantic_query;
-  auto get_data() const -> Perimortem::Core::View::Bytes {
-    return Perimortem::Core::View::Bytes();
-  }
-  auto supports(Perimortem::System::Uuid id) const
-      -> Ttx::Semantic::Negotiation::Binding::Status;
-  auto bind_interface(
-      Perimortem::System::Uuid id,
-      Ttx::Data::Form::Storage target) const
-      -> Ttx::Semantic::Negotiation::Binding::Status;
-  auto borrow() const -> Perimortem::Utility::Result<
-      Ttx::Concept::Policies::Borrowed,
-      Ttx::Semantic::Negotiation::Binding::Failure>;
-  auto release() const -> void;
+      ttx_retained* output) -> cuda_status;
 
  private:
+  friend Toolchain::Memory::Lifetime;
   Kernel(
       Program& program,
       CUfunction function,
       const ttx_representation& frame,
-      Perimortem::Memory::Dynamic::Vector<Count> offsets);
+      Perimortem::Memory::Global::Vector<Count> offsets);
   ~Kernel();
-  // Invocations share the prepared argument pointers. The caller serializes
-  // access while each launch keeps the Program's context current through
-  // completion.
-  auto launch(cuda_launch geometry, ttx_storage arguments) const
-      -> ttx_data_status;
+  auto launch(cuda_launch geometry, ttx_storage arguments) -> cuda_status;
+  static auto graph(void* context) -> ttx_abstract;
+  static auto supports(void* context, perimortem_uuid id)
+      -> ttx_negotiation_status;
+  static auto bind(void* context, perimortem_uuid id, void* output)
+      -> ttx_negotiation_status;
+  static auto resolve_route(void* context, perimortem_view_bytes route)
+      -> ttx_abstract;
+  static auto visit_routes(void* context, ttx_graph_visitor visitor) -> void;
+  static auto get_state(void* context) -> ttx_abstract_state;
+  static auto acquire(void* context, ttx_retained* output)
+      -> ttx_negotiation_status;
+  static auto release_context(void* context) -> void;
+  static auto launch_context(
+      void* context,
+      cuda_launch geometry,
+      ttx_storage arguments) -> cuda_status;
+  static const ttx_abstract_ops graph_operations;
+  static const ttx_retained_ops retained_operations;
+  static const ttx_retain_ops retain_operations;
+  static const cuda_kernel_ops operations;
+
+  Count references = 1;
   Program& program;
   CUfunction function;
-  Perimortem::Memory::Dynamic::Bytes form;
-  Perimortem::Memory::Dynamic::Vector<Count> offsets;
-  Perimortem::Memory::Dynamic::Vector<void*> arguments;
+  Perimortem::Memory::Global::Bytes form;
+  Perimortem::Memory::Global::Vector<Count> offsets;
+  Perimortem::Memory::Global::Vector<void*> arguments;
 };
+
 }  // namespace Cuda::Runtime

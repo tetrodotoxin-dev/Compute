@@ -1,40 +1,39 @@
 // # Tetrodotoxin
 // Copyright (c) 2023-present Matt Kaes and contributors
 
-#ifndef TTX_CUDA_CONTRACTS_KERNEL_H
-#include "ttx/concept/policies/borrowed.h"
-
-#define TTX_CUDA_CONTRACTS_KERNEL_H
+#ifndef CUDA_CONTRACTS_KERNEL_H
+#define CUDA_CONTRACTS_KERNEL_H
 
 #include "ttx/data/form/storage.h"
+#include "ttx/graph/abstract.h"
 
-#define TTX_CUDA_KERNEL_HIGH ((U64)0xc1bcf233d4104c0bULL)
-#define TTX_CUDA_KERNEL_LOW ((U64)0x84f0529809175603ULL)
+#include "cuda/contracts/status.h"
 
-// Launch geometry belongs to the caller's CUDA policy rather than an image
-// convention. The prepared argument frame is kept as a view and is required to
-// be kept alive by the caller until launch returns. Completion includes device
-// execution, keeping asynchronous scheduling outside this contract. A failed
-// launch may have modified device buffers, so publishing a new application
-// result remains the enclosing operation's responsibility.
+#define TTX_CUDA_KERNEL_HIGH 0x48a47e699a184a2fULL
+#define TTX_CUDA_KERNEL_LOW 0x99499b6fd15cbe85ULL
+
 typedef struct cuda_launch {
   U32 grid_x, grid_y, grid_z;
   U32 block_x, block_y, block_z;
   U32 shared_bytes;
 } cuda_launch;
 
+// Kernel executes a prepared entry using the caller's launch geometry and
+// argument frame. The caller keeps the frame and every referenced device
+// allocation alive until launch returns. Device execution completes within
+// the call. A failed launch may have modified device buffers.
+// The consumer serializes launches because preparation retains argument
+// scratch.
 typedef struct cuda_kernel {
-  const void* source;
+  void* context;
   const struct cuda_kernel_ops* operations;
 } cuda_kernel;
 
 typedef struct cuda_kernel_ops {
-  ttx_abstract_ops abstract;
-  ttx_data_status (
-      *launch)(const void* source, cuda_launch geometry, ttx_storage arguments);
+  // Returns to this binding's graph location using a provider supplied record.
+  ttx_abstract (*get_abstract)(void* context);
+  cuda_status (
+      *launch)(void* context, cuda_launch geometry, ttx_storage arguments);
 } cuda_kernel_ops;
-
-// C consumers can request the same prepared API form as the C++ facade.
-C_LINKAGE const ttx_representation* cuda_kernel_representation(void);
 
 #endif

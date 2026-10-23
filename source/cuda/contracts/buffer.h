@@ -1,39 +1,34 @@
 // # Tetrodotoxin
 // Copyright (c) 2023-present Matt Kaes and contributors
 
-#ifndef TTX_CUDA_CONTRACTS_BUFFER_H
-#include "ttx/concept/policies/borrowed.h"
+#ifndef CUDA_CONTRACTS_BUFFER_H
+#define CUDA_CONTRACTS_BUFFER_H
 
-#define TTX_CUDA_CONTRACTS_BUFFER_H
+#include "ttx/graph/abstract.h"
 
-#include "perimortem/core/view/bytes.h"
+#include "cuda/contracts/status.h"
 
-#include "ttx/data/form/representation.h"
-#include "ttx/data/status.h"
+#define TTX_CUDA_BUFFER_HIGH 0x8ee853cb736c42efULL
+#define TTX_CUDA_BUFFER_LOW 0x982dfe08237b1e65ULL
 
-#define TTX_CUDA_BUFFER_HIGH ((U64)0xc1bcf233d4104c0bULL)
-#define TTX_CUDA_BUFFER_LOW ((U64)0x84f0529809175604ULL)
-
-// A device buffer owns CUDA storage independently of any image interpretation.
-// Its address is meaningful only to kernels in the supplying CUDA context.
-// The caller retains the publication through every launch that uses it. Read
-// and write finish before returning and borrow host bytes only for that call.
+// Buffer exposes device storage independently of an image or element format.
+// Its address belongs to the supplying CUDA context. The consumer keeps the
+// Retained result available through every launch using that address.
+// Read and write finish their host transfer before returning. The caller
+// provides accessible host bytes for the requested range through that call.
 typedef struct cuda_buffer {
-  const void* source;
+  void* context;
   const struct cuda_buffer_ops* operations;
 } cuda_buffer;
 
 typedef struct cuda_buffer_ops {
-  ttx_abstract_ops abstract;
-  U64 (*address)(const void* source);
-  Count (*size)(const void* source);
-  ttx_data_status (
-      *read)(const void* source, Count offset, U8* output, Count size);
-  ttx_data_status (
-      *write)(const void* source, Count offset, perimortem_view_bytes input);
+  // Returns to this binding's graph location using a provider supplied record.
+  ttx_abstract (*get_abstract)(void* context);
+  U64 (*address)(void* context);
+  Count (*size)(void* context);
+  cuda_status (*read)(void* context, Count offset, U8* output, Count size);
+  cuda_status (
+      *write)(void* context, Count offset, perimortem_view_bytes input);
 } cuda_buffer_ops;
-
-// C consumers can request the same prepared API form as the C++ facade.
-C_LINKAGE const ttx_representation* cuda_buffer_representation(void);
 
 #endif

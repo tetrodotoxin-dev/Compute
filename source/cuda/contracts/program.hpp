@@ -3,100 +3,79 @@
 
 #pragma once
 
-#include "cuda/contracts/compiler.hpp"
-#include "cuda/contracts/program.h"
-#include "ttx/concept/policies/borrowed.hpp"
+#include "perimortem/memory/global/bytes.hpp"
 
-TTX_DATA_RECORD(
-    cuda_argument,
-    TTX_DATA_MEMBER(cuda_argument, offset),
-    TTX_DATA_MEMBER(cuda_argument, representation));
-TTX_DATA_RECORD(
-    cuda_program_ops,
-    TTX_DATA_MEMBER(cuda_program_ops, abstract),
-    TTX_DATA_MEMBER(cuda_program_ops, prepare),
-    TTX_DATA_MEMBER(cuda_program_ops, allocate));
-TTX_DATA_RECORD(
-    cuda_program,
-    TTX_DATA_MEMBER(cuda_program, source),
-    TTX_DATA_MEMBER(cuda_program, operations));
+#include "ttx/data/form/representation.hpp"
+#include "ttx/graph/abstract.hpp"
+#include "ttx/graph/policies/retained.hpp"
+
+#include "cuda/contracts/execution_status.hpp"
+#include "cuda/contracts/program.h"
 
 namespace Cuda::Contracts {
 
-// Program produces kernels and device storage as Borrowed abstracts. Each keeps
-// the state it needs after the producing Program is released. The caller binds
-// the corresponding Kernel or Buffer interface and releases the acquired
-// answer after its final use.
-class Program : public Ttx::Concept::Abstract {
+// Program creates retained Kernels and Buffers. Their resource lifetimes remain
+// independent of the result that supplied this Program binding. The caller
+// serializes operations on related resources and releases each result once.
+class Program {
  public:
-  static constexpr auto contract_id =
-      Perimortem::System::Uuid(TTX_CUDA_PROGRAM_HIGH, TTX_CUDA_PROGRAM_LOW);
-
   using Api = cuda_program;
-  using Operations = cuda_program_ops;
-  explicit constexpr Program(Api api)
-      : Abstract(api.source, api.operations->abstract) {}
-  static auto accept(Api value) -> Bool {
-    return value.operations &&
-           Abstract::accept(
-               ttx_abstract(value.source, &value.operations->abstract)) &&
-           value.operations->prepare && value.operations->allocate;
+  static constexpr auto contract_id = Perimortem::Core::Identity::Uuid(
+      TTX_CUDA_PROGRAM_HIGH,
+      TTX_CUDA_PROGRAM_LOW);
+
+  // Explicit construction accepts the complete C record established by its
+  // supplying contract. Copies keep that context and table paired and share
+  // the original access duration.
+  explicit constexpr Program(Api api) : api(api) {}
+  constexpr auto get_abi() const -> Api { return api; }
+
+  // The returned Abstract represents the graph location that supplied this
+  // Program API. The provider supplies its complete context and operations.
+  auto get_abstract() const -> Ttx::Graph::Abstract {
+    return Ttx::Graph::Abstract(api.operations->get_abstract(api.context));
   }
-  auto get_abi() const -> Api {
-    const auto value = Abstract::get_abi();
-    return Api(
-        value.source, reinterpret_cast<const Operations*>(value.operations));
-  }
+
   auto prepare(
       Perimortem::Core::View::Bytes entry,
       const Ttx::Data::Form::Representation& frame,
       Perimortem::Core::View::Vector<cuda_argument> arguments,
-      Perimortem::Memory::Dynamic::Bytes& errors) const -> Perimortem::Utility::
-      Result<Ttx::Concept::Policies::Borrowed, Ttx::Data::Status> {
-    ttx_borrowed output = ttx_borrowed();
-    const cuda_diagnostics sink =
-        cuda_diagnostics(&errors, [](void* source, perimortem_view_bytes text) {
-          *static_cast<Perimortem::Memory::Dynamic::Bytes*>(source) =
-              Perimortem::Memory::Dynamic::Bytes(
-                  Perimortem::Core::View::Bytes(text.data, text.size));
-        });
+      Perimortem::Memory::Global::Bytes& errors) const -> Perimortem::Core::
+      Storage::Result<Ttx::Graph::Policies::Retained, ExecutionStatus> {
     errors.clear();
 
-    const auto status = get_abi().operations->prepare(
-        get_abi().source,
-        {
-          entry.get_data(),
-          entry.get_size(),
-        },
-        &frame, arguments.get_data(), arguments.get_size(), sink, &output);
-    if (status == TTX_DATA_SUCCESS) {
-      if (Ttx::Concept::Policies::Borrowed::accept(output)) {
-        return Ttx::Concept::Policies::Borrowed(output);
-      }
-      if (output.source && output.operations && output.operations->release) {
-        output.operations->release(output.source);
-      }
-      return Ttx::Data::Status::Invalid;
+    ttx_retained output{};
+    const auto status = api.operations->prepare(
+        api.context, entry, &frame.get_abi(), arguments.get_data(),
+        arguments.get_size(), {&errors, diagnostic}, &output);
+    if (status != CUDA_SUCCESS_STATUS) {
+      return ExecutionStatus(status);
     }
-    return static_cast<Ttx::Data::Status>(status);
+
+    return Ttx::Graph::Policies::Retained(output);
   }
 
-  auto allocate(Count size) const -> Perimortem::Utility::
-      Result<Ttx::Concept::Policies::Borrowed, Ttx::Data::Status> {
-    ttx_borrowed output = ttx_borrowed();
-    const auto status =
-        get_abi().operations->allocate(get_abi().source, size, &output);
-    if (status == TTX_DATA_SUCCESS) {
-      if (Ttx::Concept::Policies::Borrowed::accept(output)) {
-        return Ttx::Concept::Policies::Borrowed(output);
-      }
-      if (output.source && output.operations && output.operations->release) {
-        output.operations->release(output.source);
-      }
-      return Ttx::Data::Status::Invalid;
+  auto allocate(Count size) const -> Perimortem::Core::Storage::
+      Result<Ttx::Graph::Policies::Retained, ExecutionStatus> {
+    ttx_retained output{};
+    const auto status = api.operations->allocate(api.context, size, &output);
+    if (status != CUDA_SUCCESS_STATUS) {
+      return ExecutionStatus(status);
     }
-    return static_cast<Ttx::Data::Status>(status);
+
+    return Ttx::Graph::Policies::Retained(output);
   }
+
+ private:
+  static auto diagnostic(void* callback_context, perimortem_view_bytes text)
+      -> void {
+    auto& errors =
+        *Perimortem::Core::Data::cast<Perimortem::Memory::Global::Bytes>(
+            callback_context);
+    errors = Perimortem::Core::View::Bytes(text);
+  }
+
+  Api api;
 };
 
 }  // namespace Cuda::Contracts
