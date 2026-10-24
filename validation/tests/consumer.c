@@ -8,6 +8,7 @@
 #else
 #include <dlfcn.h>
 #endif
+#include <stdio.h>
 #include <string.h>
 
 #include "ttx/data/transfer.h"
@@ -37,6 +38,22 @@ S32 cuda_validate_c(void) {
     return 1;
   }
 
+  const S32 result = cuda_validate_entry(published);
+
+#ifdef TOOLCHAIN_WINDOWS
+
+  FreeLibrary(library);
+
+#else
+
+  dlclose(library);
+
+#endif
+
+  return result;
+}
+
+S32 cuda_validate_entry(const ttx_storage* published) {
   S32 result = 2;
   U8 program_live = 0, buffer_live = 0, additional_live = 0;
   ttx_retained program_lifetime = {0}, buffer_lifetime = {0}, additional = {0};
@@ -44,7 +61,14 @@ S32 cuda_validate_c(void) {
   ttx_storage requested = {
     ttx_semantic_query_representation(), (U8*)&query, sizeof(query)};
 
-  if (!published || ttx_transfer(published, &requested) != TTX_DATA_SUCCESS) {
+  if (!published) {
+    goto cleanup;
+  }
+
+  const ttx_data_status transferred = ttx_transfer(published, &requested);
+  if (transferred != TTX_DATA_SUCCESS) {
+    fprintf(
+        stderr, "CUDA entry transfer failed: Data status %u.\n", transferred);
     goto cleanup;
   }
 
@@ -165,16 +189,6 @@ cleanup:
   if (program_live) {
     program_lifetime.operations->release(program_lifetime.context);
   }
-
-#ifdef TOOLCHAIN_WINDOWS
-
-  FreeLibrary(library);
-
-#else
-
-  dlclose(library);
-
-#endif
 
   return result;
 }

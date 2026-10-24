@@ -43,7 +43,7 @@ def _dependencies(ctx):
             library = None
             runtime = None
             if component == "cuda_cudart":
-                library = 'static_library = "lib/x64/cuda.lib"' if windows else 'interface_library = "lib/stubs/libcuda.so", system_provided = True'
+                library = 'interface_library = "' + ("lib/x64/cuda.lib" if windows else "lib/stubs/libcuda.so") + '", system_provided = True'
             elif component == "cuda_nvrtc":
                 library = 'shared_library = "' + ("bin/x64/nvrtc64_130_0.dll" if windows else "lib/libnvrtc.so.13") + '"'
                 if windows:

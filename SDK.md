@@ -24,8 +24,17 @@ The root `:sdk` target declares static and shared Linux and Windows packages.
 The library's ordinary source target uses shared TTX and Perimortem, while its
 static variant selects the static dependencies.
 
-Full SDK packaging currently stops on the Windows NVRTC builtins dependency:
-NVIDIA supplies that DLL for runtime loading without an import library, while
-Toolchain 0.4.1 requires an import library for every bundled Windows DLL.
+SDK packaging requires Toolchain 0.4.2's runtime-only DLL and system interface
+support. The checkout retains its published 0.4.1 pin until that release is
+available. The driver link interfaces accompany the static SDK; the installed
+NVIDIA driver supplies their runtime implementation. NVRTC and its builtins
+are bundled runtime dependencies.
+
+`python3 validation/consumer/check.py` builds the SDK and validates independent
+C and C++ consumers in both linkage modes. Linux consumers compile CUDA source
+and exercise retained storage, including from a relocated package. Windows
+consumers are compiled and linked. Additional Bazel arguments can be supplied
+for explicitly approved development experiments.
+
 The CUDA 0.4.0 SDK is not published. NVIDIA runtime distribution and notices
 must be checked with the completed package before publication.
