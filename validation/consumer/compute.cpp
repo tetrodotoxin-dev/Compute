@@ -7,6 +7,7 @@
 #include "ttx/graph/capabilities/retain.hpp"
 #include "ttx/graph/policies/none.hpp"
 
+#include "compute/execution/commands.hpp"
 #include "compute/image/invert.hpp"
 #include "cpu/image/rgba8.hpp"
 #include "cpu/platform/engine.hpp"
@@ -16,19 +17,42 @@ using namespace Perimortem::Core;
 using namespace Ttx::Graph;
 using namespace Ttx::Semantic;
 using namespace Compute::Image;
+using namespace Compute::Execution;
 using namespace Cpu::Image;
 
 static auto execute(Abstract factory, Abstract input)
     -> Storage::Option<Policies::Retained> {
   Storage::Option<Policies::Retained> output;
   auto callback = [&](Abstract engine) {
-    engine.resolve_route("invert"_view)
-        .bind<Invert>()
+    auto record = [&](Abstract buffer) {
+      buffer.bind<Invert>().visit(
+          [&](Invert operation) {
+            operation.record(input).visit(
+                [&](Policies::Retained image) {
+                  buffer.bind<Commands>().visit(
+                      [&](auto commands) {
+                        if (commands.submit() == COMPUTE_EXECUTION_SUCCESS) {
+                          output = image;
+                        }
+                      },
+
+                      [] {});
+                  if (!output) {
+                    image.release();
+                  }
+                },
+
+                [](compute_image_status) {});
+          },
+
+          [] {});
+    };
+
+    engine.resolve_route("commands"_view)
+        .bind<Capabilities::Create>()
         .visit(
-            [&](Invert operation) {
-              operation.apply(input).visit(
-                  [&](Policies::Retained image) { output = image; },
-                  [](compute_image_status) {});
+            [&](auto create) {
+              create.create(Policies::None::get_none().get_abstract(), record);
             },
 
             [] {});

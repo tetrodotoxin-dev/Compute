@@ -8,12 +8,11 @@
 namespace Cpu::Platform {
 
 // Engine supplies a Create factory for host execution. None requests the
-// default engine. The created Abstract exposes the invert route and its Invert
-// contract. The consumer can retain the engine during the creation callback.
-// This stateless engine remains backed by the loaded module, while each image
-// result holds its own storage. The host keeps the module loaded through use.
-// Calls follow the Invert contract's serialization policy for an engine
-// creation and its produced images.
+// default engine. Its commands route supplies a Create factory for independent
+// command buffers. The consumer retains an engine or buffer during creation
+// when later calls require it. CPU submissions execute in authored order on
+// the submitting thread. Results follow the Commands and Pixels contracts.
+// The host keeps the module loaded through every use and release.
 class Engine {
  public:
   static EXPORTED(CPU) auto factory() -> Ttx::Graph::Abstract;

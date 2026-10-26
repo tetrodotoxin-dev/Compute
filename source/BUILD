@@ -8,6 +8,11 @@ package(default_visibility = ["//visibility:public"])
 cc_library(
     name = "compute_headers",
     hdrs = glob([
+        "compute/execution/commands.h",
+        "compute/execution/commands.hpp",
+        "compute/execution/dependency.h",
+        "compute/execution/dependency.hpp",
+        "compute/execution/status.h",
         "compute/image/*.h",
         "compute/image/*.hpp",
         "compute/policies/*.h",

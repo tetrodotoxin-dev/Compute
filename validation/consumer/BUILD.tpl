@@ -27,6 +27,8 @@ cc_binary(
     name = "cpu_consumer",
     srcs = [
         "validation/tests/compute.cpp",
+        "validation/tests/deferred.c",
+        "validation/tests/deferred.h",
         "validation/tests/generated.c",
         "validation/tests/generated.h",
     ],

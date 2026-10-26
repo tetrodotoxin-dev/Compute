@@ -16,24 +16,38 @@ Engine modules publish their own entry points. The CPU and CUDA modules each
 export `ttx_entry`; look up that symbol on the chosen module and establish its
 Query through Data Transfer before requesting an Abstract.
 
-Engines expose image inversion through their `invert` route. Bind Invert there
-and supply an image Abstract that binds Pixels.
-Successful execution returns a Retained image whose Abstract binds Pixels.
-Each retained result carries one release obligation. Its resources remain
-available independently of the original engine acquisition, and another
-consumer can request its own acquisition through Retain.
+An engine's `commands` route supplies a Create factory for command buffers.
+Retain the buffer inside the creation callback. Its Abstract binds Commands
+for submission and completion, and typed operations such as Invert for
+recording. A successful record returns a Retained image whose Pixels contract
+exposes its dimensions immediately. Payload reads before submission return
+Invalid. After submission, reads wait for the work producing that image.
 
-The current image operations finish before returning. Their declarations
-specify serialization, input access and result validity. CUDA currently reads
-input pixels through host memory, including inputs supplied by another CUDA
-engine; its output image keeps device storage behind the Pixels contract.
+Commands are recorded in authored order and submitted once. A buffer can use
+its own earlier result directly. Recording an input from another buffer requires
+that producer to be submitted first. Inputs are retained through their supplied
+contracts or copied while their original access is valid. Retention can supply
+a different Abstract and different typed contexts. Recording requests Pixels
+again on that returned Abstract before keeping a deferred read.
+
+Submit reports whether execution was started. Wait reports completion or
+execution failure without copying data. Submissions can fail after earlier
+commands have started, and recording remains closed after either outcome.
+The consumer serializes host calls through one engine creation, all of its
+buffers and their results. Submitted device work can overlap. Retained inputs
+continue to follow their supplying access and serialization policies.
+
+Each result acquisition keeps its producing buffer available independently of
+the original engine or buffer acquisition. Final release completes any pending
+work before freeing its resources and reports cleanup through TTX Retained.
+Discarding an unsubmitted buffer releases captured inputs without executing it.
 
 ## CPU module
 
 The CPU package supplies its engine and host image storage through `cpu/`
 headers. Its entry supplies the CPU Create factory. None requests the default
-engine, whose Abstract exposes the `invert` route. Retain the engine inside the
-creation callback for later use.
+engine, whose `commands` route creates independent buffers. Retain the engine
+inside the creation callback for later use.
 
 Native C++ callers can use `Cpu::Platform::Engine::factory()` and create host
 images through `Cpu::Image::Rgba8::create()`. The resulting Abstracts provide
@@ -43,8 +57,15 @@ the same Compute contracts used across a module boundary.
 
 The optional CUDA package adds a compiler Abstract whose `engine` route selects
 the CUDA Create factory. Its image operations use the same Compute contracts,
-with device storage private to the provider. Keep every provider module loaded
-through all operations and releases that use its code.
+with device storage private to the provider. Each buffer has a dedicated CUDA
+stream, with completion events for its output images. CUDA allocates storage
+before launching its sequence, and preserves local dependencies as device
+addresses supplied by its own recording.
+
+The optional DeviceImage contract supplies read access in a requested CUDA
+context and stream. Compatible buffers order that access through CUDA events.
+Other inputs use Pixels and captured host storage. The consumer keeps each
+provider module loaded through every operation and release using its code.
 
 CUDA's additional public C records live under `cuda/contracts`. The headers
 use TTX 0.4.1 and Perimortem 0.4.0. The build uses Toolchain 0.4.2.
@@ -91,7 +112,9 @@ CPU libraries with no CUDA dependency. Linux consumers execute in both linkage
 modes, including a relocated CUDA consumer. Windows consumers are compiled and
 linked.
 
-The [Compute 0.1.0 release](https://github.com/tetrodotoxin-dev/Compute/releases/tag/v0.1.0)
-contains all three packages, their checksums and the source snapshot. NVIDIA
-components in the CUDA package retain their supplied license terms and notices
+The refreshed Compute 0.1.0 bundle replaces the earlier eager execution API.
+Commands and Dependency describe recorded work, and Invert and Pixels use new
+UUIDs for recording and deferred result access. Consumers of the earlier
+bundle must update their archive checksums and migrate to command buffers.
+NVIDIA components in the CUDA package retain their supplied license terms and notices
 in each archive's LICENSE file. Compute's own source remains MIT licensed.

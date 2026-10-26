@@ -3,21 +3,20 @@
 
 #include "cpu/platform/engine.hpp"
 
+#include "perimortem/core/diagnostics/log.hpp"
 #include "perimortem/core/view/null_terminated.hpp"
 
 #include "ttx/graph/capabilities/create.hpp"
 #include "ttx/graph/policies/none.h"
 
-#include "compute/image/invert.hpp"
 #include "compute/policies/accelerated.h"
-#include "cpu/image/rgba8.hpp"
+#include "cpu/execution/submission.hpp"
 
 using namespace Perimortem::Core;
 using namespace Perimortem::Memory;
 using namespace Ttx::Graph;
-using namespace Compute::Image;
-using namespace Cpu::Image;
 using namespace Cpu::Platform;
+using namespace Cpu::Execution;
 
 static U8 engine_context, factory_context;
 class CpuProvider {
@@ -40,47 +39,23 @@ class CpuProvider {
     return TTX_NEGOTIATION_SATISFIED;
   }
 
-  static auto apply(void* context, ttx_abstract input, ttx_retained* output)
-      -> compute_image_status {
-    if (!output) {
-      return COMPUTE_IMAGE_INVALID;
+  static auto create_commands(
+      void* context,
+      ttx_abstract arguments,
+      void* callback_context,
+      void (*callback)(void*, ttx_abstract)) -> ttx_negotiation_status {
+    if (Abstract(arguments).get_state() != Abstract::State::None) {
+      return TTX_NEGOTIATION_REJECTED;
     }
 
-    return Abstract(input).bind<Pixels>().visit(
-        [&](Pixels pixels) -> compute_image_status {
-          const auto size = pixels.dimensions();
-          const U64 count = U64(size.width) * size.height;
-          if (!count || count > Count(-1) / 4) {
-            return COMPUTE_IMAGE_INVALID;
-          }
+    const auto commands = Submission::create();
+    callback(callback_context, commands.get_abstract().get_abi());
+    if (commands.release() != Policies::Retained::Status::Success) {
+      Diagnostics::Log::error(
+          "CPU commands cleanup failed after creation."_view);
+    }
 
-          Global::Bytes data;
-          data.forgetful_resize(count * 4);
-
-          const auto status = pixels.read(data.get_access());
-          if (status != COMPUTE_IMAGE_SUCCESS) {
-            return status;
-          }
-
-          for (Count offset = 0; offset < data.get_size(); offset += 4) {
-            data.get_access().get_data()[offset] ^= 255;
-            data.get_access().get_data()[offset + 1] ^= 255;
-            data.get_access().get_data()[offset + 2] ^= 255;
-          }
-
-          return Rgba8::create(size.width, size.height, data.get_view())
-              .visit(
-                  [&](Policies::Retained result) -> compute_image_status {
-                    *output = result.get_abi();
-                    return COMPUTE_IMAGE_SUCCESS;
-                  },
-
-                  [](compute_image_status failure) -> compute_image_status {
-                    return failure;
-                  });
-        },
-
-        []() -> compute_image_status { return COMPUTE_IMAGE_INVALID; });
+    return TTX_NEGOTIATION_SATISFIED;
   }
 
   static auto supports(void* context, perimortem_uuid id)
@@ -94,9 +69,8 @@ class CpuProvider {
     }
 
     return contract == Abstract::contract_id ||
-                   contract == Invert::contract_id ||
-                   contract == Capabilities::Retain::contract_id ||
-                   contract == Policies::Retained::contract_id
+                   contract == Capabilities::Create::contract_id ||
+                   contract == Capabilities::Retain::contract_id
                ? TTX_NEGOTIATION_SATISFIED
                : TTX_NEGOTIATION_UNKNOWN;
   }
@@ -109,12 +83,10 @@ class CpuProvider {
     }
 
     const Identity::Uuid contract(id);
-    if (contract == Invert::contract_id) {
-      *Data::cast<compute_invert>(output) = {context, &invert_operations};
+    if (contract == Capabilities::Create::contract_id) {
+      *Data::cast<ttx_create>(output) = {context, &command_creation};
     } else if (contract == Capabilities::Retain::contract_id) {
       *Data::cast<ttx_retain>(output) = {context, &retain_operations};
-    } else if (contract == Policies::Retained::contract_id) {
-      *Data::cast<ttx_retained>(output) = {context, &retained_operations};
     } else {
       *Data::cast<ttx_abstract>(output) = engine(context);
     }
@@ -124,11 +96,12 @@ class CpuProvider {
 
   static auto route(void* context, perimortem_view_bytes route)
       -> ttx_abstract {
-    return View::Bytes(route) == "invert"_view ? engine(context) : ttx_none();
+    return View::Bytes(route) == "commands"_view ? engine(context) : ttx_none();
   }
 
   static auto visit(void* context, ttx_graph_visitor visitor) -> void {
-    visitor.callback(visitor.callback_context, "invert"_view, engine(context));
+    visitor.callback(
+        visitor.callback_context, "commands"_view, engine(context));
   }
 
   static auto state(void* context) -> ttx_abstract_state {
@@ -187,7 +160,7 @@ class CpuProvider {
  private:
   static const ttx_retained_ops retained_operations;
   static const ttx_retain_ops retain_operations;
-  static const compute_invert_ops invert_operations;
+  static const ttx_create_ops command_creation;
   static const ttx_create_ops create_operations;
   static const ttx_abstract_ops engine_operations;
   static const ttx_abstract_ops factory_operations;
@@ -195,7 +168,7 @@ class CpuProvider {
 
 const ttx_retained_ops CpuProvider::retained_operations = {engine, release};
 const ttx_retain_ops CpuProvider::retain_operations = {engine, retain};
-const compute_invert_ops CpuProvider::invert_operations = {engine, apply};
+const ttx_create_ops CpuProvider::command_creation = {engine, create_commands};
 const ttx_create_ops CpuProvider::create_operations = {factory_graph, create};
 const ttx_abstract_ops CpuProvider::engine_operations = {
   supports, bind, route, visit, state};

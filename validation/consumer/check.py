@@ -55,7 +55,7 @@ def check():
         for name in [".bazelrc", ".bazelversion"]:
             shutil.copyfile(repository / name, workspace / name)
         shutil.copyfile(fixtures / "BUILD.tpl", workspace / "BUILD")
-        for name in ["consumer.c", "consumer.h", "compute.cpp", "generated.c", "generated.h"]:
+        for name in ["consumer.c", "consumer.h", "compute.cpp", "deferred.c", "deferred.h", "generated.c", "generated.h"]:
             shutil.copyfile(repository / "validation/tests" / name,
                             workspace / "validation/tests" / name)
         for name in ["consumer.c", "consumer.cpp", "compute.cpp"]:

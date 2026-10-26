@@ -9,9 +9,13 @@
 
 namespace Compute::Image {
 
-// Invert accepts an image Abstract and returns a separately retained snapshot
-// with complemented RGB and preserved alpha. The complete contract and input
-// lifetime are specified by the C operation in invert.h.
+// Invert appends a transformation to its bound command buffer. Recording
+// captures or retains the input and returns a Retained result artifact. Pixel
+// reads require the buffer's submission. The caller keeps this API record and
+// the input Abstract accessible until record returns, then releases each
+// successful result after its final use. `invert.h` specifies snapshot
+// semantics and input capture when retention cannot supply the required
+// interface.
 class Invert {
  public:
   using Api = compute_invert;
@@ -24,11 +28,11 @@ class Invert {
     return Ttx::Graph::Abstract(api.operations->get_abstract(api.context));
   }
 
-  auto apply(Ttx::Graph::Abstract image) const -> Perimortem::Core::Storage::
+  auto record(Ttx::Graph::Abstract image) const -> Perimortem::Core::Storage::
       Result<Ttx::Graph::Policies::Retained, compute_image_status> {
     ttx_retained output{};
     const auto status =
-        api.operations->apply(api.context, image.get_abi(), &output);
+        api.operations->record(api.context, image.get_abi(), &output);
     if (status != COMPUTE_IMAGE_SUCCESS) {
       return status;
     }

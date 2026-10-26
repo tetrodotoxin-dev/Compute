@@ -8,24 +8,27 @@
 
 #include "compute/image/pixels.h"
 
-#define COMPUTE_INVERT_ID_HIGH 0x163ec657f7f6492aULL
-#define COMPUTE_INVERT_ID_LOW 0xb1b89d3cd7d9ef2bULL
+#define COMPUTE_INVERT_ID_HIGH 0x73108444b94d4e03ULL
+#define COMPUTE_INVERT_ID_LOW 0xbe270de2a555223dULL
 
-// Invert complements each RGB byte and preserves alpha and dimensions. Apply
-// obtains Pixels from the supplied image Abstract and produces an independent
-// snapshot. The input remains unchanged. The provider interprets the input
-// through that bound contract, allowing another provider to supply its pixels.
+// Invert records RGB complementation while preserving alpha and dimensions.
+// The input remains unchanged. The binding's Abstract also supplies Commands.
+// Record appends to that buffer and returns one Retained image on Success.
+// The result supplies Pixels and Dependency before execution. Its dimensions
+// are available immediately. Pixel reads require the buffer's submission.
 //
-// The caller keeps the input Abstract accessible until apply returns. On
-// success, apply writes one Retained result whose Abstract binds Pixels. The
-// consumer releases that acquisition after its final use. A failed call leaves
-// output unusable and transfers no release obligation. Execution finishes
-// within the call, including any transfer needed to consume another provider's
-// image.
+// The caller keeps the input accessible through record. An input produced in
+// this buffer is an earlier recorded dependency. A different producing buffer
+// must already be submitted. Its input is retained through the supplied
+// contract or copied while accessible. A retained input is used through its
+// newly supplied Abstract and bindings. Recording can therefore capture input
+// whose access ends with a callback. A failed record appends nothing and
+// transfers no acquisition.
 //
-// The consumer must serialize calls through one engine creation and every
-// image produced through it, including all bindings, retention and release.
-// Input images also follow their supplying contract's serialization policy.
+// Submit and wait follow Commands, including authored ordering and resource
+// lifetimes. Recording after submission returns Invalid. Host calls follow
+// the engine serialization policy in Commands and each input's supplying
+// access policy.
 typedef struct compute_invert {
   void* context;
   const struct compute_invert_ops* operations;
@@ -36,7 +39,7 @@ typedef struct compute_invert_ops {
   // Abstract record, including that record's own context and operations.
   ttx_abstract (*get_abstract)(void* context);
   compute_image_status (
-      *apply)(void* context, ttx_abstract image, ttx_retained* output);
+      *record)(void* context, ttx_abstract image, ttx_retained* output);
 } compute_invert_ops;
 
 #endif
