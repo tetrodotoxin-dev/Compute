@@ -3,8 +3,9 @@
 sdks.release(
     name = "cuda",
     archives = {archives},
+    library = "cuda",
     linkage = "{linkage}",
-    project = "CUDA",
+    project = "Compute",
     version = "{version}",
     deps = [
         "@perimortem{suffix}//:core",
@@ -17,6 +18,7 @@ use_repo(sdks, "cuda")
 sdks.release(
     name = "compute",
     archives = {compute_archives},
+    library = "compute",
     linkage = "{linkage}",
     project = "Compute",
     version = "{version}",
