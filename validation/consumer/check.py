@@ -1,6 +1,6 @@
 # Copyright (c) 2023-present Matt Kaes and contributors
 
-"""Build Compute and CUDA SDKs and consume them from a separate workspace.
+"""Build the Compute SDK bundle and consume it from a separate workspace.
 
 Run `python3 validation/consumer/check.py` from a source checkout. Additional
 Bazel flags are forwarded to each build, allowing an explicitly approved local
@@ -25,14 +25,14 @@ def check():
     repository = Path(__file__).resolve().parents[2]
     fixtures = repository / "validation/consumer"
     flags = ["--config=release", *sys.argv[1:]]
-    subprocess.run(["bazel", "build", ":sdk", ":cuda_sdk", *flags], cwd=repository, check=True)
+    subprocess.run(["bazel", "build", ":sdk", *flags], cwd=repository, check=True)
     directory = Path(subprocess.check_output(
         ["bazel", "info", "bazel-bin", *flags], cwd=repository, text=True).strip())
     source_module = (repository / "MODULE.bazel").read_text()
     version = re.search(r'version\s*=\s*"([^"]+)"', source_module).group(1)
     prefix = "cuda-" + version + "-"
     packages = {}
-    for package in ["cuda", "compute"]:
+    for package in ["compute", "cpu", "cuda"]:
         package_prefix = package + "-" + version + "-"
         pins = {}
         for line in (directory / (package_prefix + "sha256.txt")).read_text().splitlines():
@@ -55,16 +55,16 @@ def check():
         for name in [".bazelrc", ".bazelversion"]:
             shutil.copyfile(repository / name, workspace / name)
         shutil.copyfile(fixtures / "BUILD.tpl", workspace / "BUILD")
-        for name in ["consumer.c", "consumer.h"]:
+        for name in ["consumer.c", "consumer.h", "compute.cpp", "generated.c", "generated.h"]:
             shutil.copyfile(repository / "validation/tests" / name,
                             workspace / "validation/tests" / name)
         for name in ["consumer.c", "consumer.cpp", "compute.cpp"]:
             shutil.copyfile(fixtures / name, workspace / "validation/consumer" / name)
         command = ["bazel", "--batch", "--output_base=" + str(root / "bazel")]
-        targets = [":c_consumer", ":cpp_consumer", ":compute_consumer"]
+        targets = [":c_consumer", ":cpp_consumer", ":cpu_consumer", ":compute_consumer"]
         for linkage in ["static", "shared"]:
             module = dependencies + (fixtures / "MODULE.tpl").read_text()
-            for key, value in {"archives": repr(packages["cuda"]), "compute_archives": repr(packages["compute"]), "version": version,
+            for key, value in {"archives": repr(packages["cuda"]), "compute_archives": repr(packages["compute"]), "cpu_archives": repr(packages["cpu"]), "version": version,
                                "linkage": linkage, "suffix": "_static" if linkage == "static" else ""}.items():
                 module = module.replace("{" + key + "}", value)
             (workspace / "MODULE.bazel").write_text(module)
@@ -78,10 +78,16 @@ def check():
                 dynamic = subprocess.check_output(["readelf", "-d", str(binary)], text=True)
                 required = re.findall(r"\(NEEDED\)[^\n]*\[([^\]]+)\]", dynamic)
                 if linkage == "static" and any(name in required for name in
-                                               ["libcompute.so", "libttx_cuda.so", "libttx.so", "libperimortem.so"]):
+                                               ["libcompute.so", "libttx_cpu.so", "libttx_cuda.so", "libttx.so", "libperimortem.so"]):
                     raise ValueError("Static consumer requires a first-party shared library")
-                if linkage == "shared" and "libttx_cuda.so" not in required:
-                    raise ValueError("Shared consumer must use the CUDA shared library")
+                if target == ":cpu_consumer" and any("cuda" in name or "nvrtc" in name for name in required):
+                    raise ValueError("CPU consumer requires a CUDA runtime library")
+                if linkage == "shared":
+                    providers = ["libttx_cpu.so"] if target == ":cpu_consumer" else ["libttx_cuda.so"]
+                    if target == ":compute_consumer":
+                        providers.append("libttx_cpu.so")
+                    if any(name not in required for name in providers):
+                        raise ValueError("Shared consumer must use its provider libraries")
                 print(f"{linkage} {binary.name}: {binary.stat().st_size:,} bytes; "
                       f"dependencies: {', '.join(required)}", flush=True)
             if linkage == "shared":

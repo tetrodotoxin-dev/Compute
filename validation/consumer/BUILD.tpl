@@ -24,10 +24,25 @@ cc_binary(
 )
 
 cc_binary(
+    name = "cpu_consumer",
+    srcs = [
+        "validation/tests/compute.cpp",
+        "validation/tests/generated.c",
+        "validation/tests/generated.h",
+    ],
+    deps = [
+        "@compute",
+        "@cpu",
+        "@tetro_toolchain//source/toolchain/validation:test",
+    ],
+)
+
+cc_binary(
     name = "compute_consumer",
     srcs = ["validation/consumer/compute.cpp"],
     deps = [
         "@compute",
+        "@cpu",
         "@cuda",
     ],
 )

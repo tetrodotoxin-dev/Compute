@@ -9,20 +9,15 @@ cc_library(
     name = "compute_headers",
     hdrs = glob([
         "compute/image/*.h",
+        "compute/image/*.hpp",
         "compute/policies/*.h",
-    ]) + [
-        "compute/image/invert.hpp",
-        "compute/image/pixels.hpp",
-    ],
+    ]),
     includes = ["."],
 )
 
 library(
     name = "compute_static",
-    srcs = glob([
-        "compute/**/*.cpp",
-        "compute/**/*.c",
-    ]),
+    srcs = glob(["compute/**/*.cpp"]),
     hdrs = glob([
         "compute/**/*.h",
         "compute/**/*.hpp",
@@ -37,10 +32,7 @@ library(
 
 library(
     name = "compute_shared",
-    srcs = glob([
-        "compute/**/*.cpp",
-        "compute/**/*.c",
-    ]),
+    srcs = glob(["compute/**/*.cpp"]),
     hdrs = glob([
         "compute/**/*.h",
         "compute/**/*.hpp",
@@ -53,6 +45,49 @@ library(
         "//conditions:default": "libcompute.so",
     }),
     deps = [
+        "@perimortem//:memory",
+        "@ttx//:graph",
+    ],
+)
+
+library(
+    name = "cpu_static",
+    srcs = glob([
+        "cpu/**/*.cpp",
+        "cpu/**/*.c",
+    ]),
+    hdrs = glob([
+        "cpu/**/*.h",
+        "cpu/**/*.hpp",
+    ]),
+    includes = ["."],
+    module = "cpu",
+    deps = [
+        ":compute_headers",
+        "@perimortem_static//:memory",
+        "@ttx_static//:graph",
+    ],
+)
+
+library(
+    name = "cpu_shared",
+    srcs = glob([
+        "cpu/**/*.cpp",
+        "cpu/**/*.c",
+    ]),
+    hdrs = glob([
+        "cpu/**/*.h",
+        "cpu/**/*.hpp",
+    ]),
+    includes = ["."],
+    linkage = "shared",
+    module = "cpu",
+    shared_lib_name = select({
+        WINDOWS: "ttx_cpu.dll",
+        "//conditions:default": "libttx_cpu.so",
+    }),
+    deps = [
+        ":compute_headers",
         "@perimortem//:memory",
         "@ttx//:graph",
     ],

@@ -8,16 +8,15 @@
 #include "ttx/graph/policies/none.hpp"
 
 #include "compute/image/invert.hpp"
-#include "compute/image/rgba8.hpp"
-#include "compute/platforms/cpu.hpp"
+#include "cpu/image/rgba8.hpp"
+#include "cpu/platform/engine.hpp"
 #include "cuda/platform/engine.hpp"
 
 using namespace Perimortem::Core;
 using namespace Ttx::Graph;
 using namespace Ttx::Semantic;
 using namespace Compute::Image;
-using namespace Compute::Platforms;
-using namespace Cuda::Platform;
+using namespace Cpu::Image;
 
 static auto execute(Abstract factory, Abstract input)
     -> Storage::Option<Policies::Retained> {
@@ -44,7 +43,7 @@ static auto execute(Abstract factory, Abstract input)
   return output;
 }
 
-// Both packages supply the same domain contracts. CUDA consumes a CPU-produced
+// Both engines supply the same domain contracts. CUDA consumes a CPU-produced
 // image, and its result stays readable after its engine callback has ended.
 S32 main() {
   const U8 pixels[] = {0, 53, 255, 91};
@@ -52,10 +51,11 @@ S32 main() {
   Rgba8::create(1, 1, View::Bytes(pixels))
       .visit(
           [&](Policies::Retained input) {
-            execute(Cpu::factory(), input.get_abstract())
+            execute(Cpu::Platform::Engine::factory(), input.get_abstract())
                 .visit(
                     [&](Policies::Retained cpu) {
-                      execute(Engine::factory(), cpu.get_abstract())
+                      execute(
+                          Cuda::Platform::Engine::factory(), cpu.get_abstract())
                           .visit(
                               [&](Policies::Retained gpu) {
                                 U8 output[4]{};

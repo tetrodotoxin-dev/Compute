@@ -4,10 +4,19 @@ load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@tetro_toolchain//:defs.bzl", "format", "package", "snapshot", "validation", "vscode")
 
 package(
+    name = "compute_sdk",
     linkage = "shared",
     module = "compute",
     shared = "//source:compute_shared",
     static = "//source:compute_static",
+)
+
+package(
+    name = "cpu_sdk",
+    linkage = "shared",
+    module = "cpu",
+    shared = "//source:cpu_shared",
+    static = "//source:cpu_static",
 )
 
 package(
@@ -26,13 +35,28 @@ package(
     static = "//source:cuda_static",
 )
 
+filegroup(
+    name = "sdk",
+    srcs = [
+        ":compute_sdk",
+        ":cpu_sdk",
+        ":cuda_sdk",
+    ],
+    tags = ["manual"],
+)
+
 format()
 
 snapshot()
 
 validation(
-    test_data = ["//source:cuda_shared"],
+    benchmark_deps = [":cpu"],
+    test_data = [
+        "//source:cpu_shared",
+        "//source:cuda_shared",
+    ],
     test_deps = [
+        ":cpu",
         ":cuda",
         "//build:driver",
         "@perimortem//:system",
@@ -52,6 +76,7 @@ cc_binary(
     ],
     deps = [
         ":compute",
+        ":cpu",
         "@tetro_toolchain//source/toolchain/validation:test",
     ],
 )

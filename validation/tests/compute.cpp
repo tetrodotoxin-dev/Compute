@@ -11,9 +11,9 @@
 
 #include "compute/execution/selection.hpp"
 #include "compute/image/invert.hpp"
-#include "compute/image/rgba8.hpp"
-#include "compute/platforms/cpu.hpp"
 #include "compute/policies/accelerated.h"
+#include "cpu/image/rgba8.hpp"
+#include "cpu/platform/engine.hpp"
 #include "validation/tests/generated.h"
 
 using namespace Perimortem::Core;
@@ -21,7 +21,8 @@ using namespace Toolchain::Validation;
 using namespace Ttx::Graph;
 using namespace Ttx::Semantic;
 using namespace Compute::Image;
-using namespace Compute::Platforms;
+using namespace Cpu::Image;
+using namespace Cpu::Platform;
 using namespace Compute::Execution;
 
 static Harness ComputeTests = {.name = "Compute::Cpu"};
@@ -41,7 +42,7 @@ VALIDATION_TEST(ComputeTests, create_invert_release) {
         [&] { EXPECT(False); });
   };
 
-  Cpu::factory().bind<Capabilities::Create>().visit(
+  Engine::factory().bind<Capabilities::Create>().visit(
       [&](Capabilities::Create create) {
         EXPECT(
             create.create(
@@ -129,10 +130,10 @@ VALIDATION_TEST(ComputeTests, create_invert_release) {
 
 VALIDATION_TEST(ComputeTests, refused_creation) {
   auto unexpected = [&](Abstract unexpected) { EXPECT(False); };
-  Cpu::factory().bind<Capabilities::Create>().visit(
+  Engine::factory().bind<Capabilities::Create>().visit(
       [&](Capabilities::Create create) {
         EXPECT(
-            create.create(Cpu::factory(), unexpected) ==
+            create.create(Engine::factory(), unexpected) ==
             Negotiation::Status::Rejected);
       },
 
@@ -142,7 +143,7 @@ VALIDATION_TEST(ComputeTests, refused_creation) {
 VALIDATION_TEST(ComputeTests, cpu_fallback) {
   Count attempts = 0, callbacks = 0;
   const ttx_abstract factories[] = {
-    compute_refusing_factory(&attempts), Cpu::factory().get_abi()};
+    compute_refusing_factory(&attempts), Engine::factory().get_abi()};
 
   Selection selection{View::Vector<ttx_abstract>(factories)};
   auto callback = [&](Abstract engine) {

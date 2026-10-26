@@ -1,76 +1,68 @@
 # Compute
 
-Compute supplies execution domains and their platform implementations for the
-Tetrodotoxin family of projects. It builds on [TTX](https://github.com/tetrodotoxin-dev/TTX)
-so applications can request an operation through a shared contract while each
-provider controls how the work executes and where its data lives.
+Compute provides a [TTX](https://github.com/tetrodotoxin-dev/TTX) SDK for compute
+infrastructure used by Tetrodotoxin projects. Its primary purpose is to provide
+the base for Tetrodotoxin's image acceleration and serve as a practical template
+for wrapping infrastructure with TTX.
 
-An application often needs to combine work performed by several systems: a
-host implementation, an accelerator, or a provider supplied by another project.
-Compute gives those systems common capabilities and policies to negotiate.
-Applications compose the operations they need, and providers can substitute
-different implementations while preserving the requested behavior.
+The SDK bundle includes two execution modules:
 
-## Compute domains
+- A simplified CUDA engine.
+- A CPU engine.
 
-A domain defines what an operation means and the guarantees required to use
-its inputs and results. Its contracts are independent of the platform that
-implements them. New operations and policies can extend a domain through TTX's
-existing graph and binding model.
+Both implement the same Compute contracts. Applications use those contracts to
+request work, while each engine manages its own execution and storage. Other
+systems can implement the same contracts or extend the domain with their own.
 
-The current image domain supplies RGBA8 snapshots through
+## The Compute SDK
+
+The SDK defines capabilities and policies for negotiating compute operations
+through TTX. Its current image contracts supply RGBA8 snapshots through
 [Pixels](source/compute/image/pixels.h) and color inversion through
-[Invert](source/compute/image/invert.h). An image provider can store its pixels,
-generate them on demand, or transfer them from a device. Both CPU and CUDA
-engines consume that same interface and produce independently retained results.
+[Invert](source/compute/image/invert.h). An image can supply its pixels from
+host storage, device storage or a generated result. The operation uses the
+published interface to obtain those pixels.
 
-Policies express additional requirements separately from operations.
+Policies express requirements independently of an engine's implementation.
 [Accelerated](source/compute/policies/accelerated.h) promises execution on a
-compute device separate from the host CPU. A consumer can require that promise
-without identifying a particular vendor or assuming a performance advantage.
+compute device separate from the host CPU. A consumer can require that policy
+when selecting an engine. Each candidate must satisfy the requirement,
+including any fallback.
 
-## Providers and composition
+Engine factories use TTX's Create capability. A consumer can use a factory
+directly or compose several with
+[Selection](source/compute/execution/selection.hpp), which provides the same
+Create interface. The consumer retains an engine for use beyond its creation
+callback. Produced images retain the resources they need independently of that
+engine acquisition.
 
-Engine factories are Abstracts that supply TTX's Create capability. Creation
-receives an argument graph and supplies an engine through a callback. A consumer
-can use the engine during that callback or retain it for later operations.
-Results retain the resources they need independently of the engine acquisition
-that produced them.
+## Modules
 
-A consumer can choose a factory directly or compose several factories with
-[Selection](source/compute/execution/selection.hpp). Selection tries candidates
-before execution and applies the required policy to every candidate, including
-fallbacks. It publishes the same Create capability as an individual factory.
+The shared SDK and its implementations have separate source and build ownership:
 
-The CPU and CUDA providers are separate libraries. Loading a provider establishes
-its TTX interface; creating an engine establishes the resources for a request.
-The host keeps each provider library loaded through the final use and release
-of its interfaces. Providers can expose additional routes and contracts through
-their graphs while consumers use the capabilities they understand.
+| Module | Provides |
+| --- | --- |
+| [Compute](source/compute) | TTX compute contracts, C++ interfaces and factory selection |
+| [CPU](source/cpu) | The host execution engine and host image storage |
+| [CUDA](source/cuda) | The CUDA engine, source compilation, prepared kernels and device buffers |
 
-## SDKs
+CPU and CUDA each publish a module entry through TTX's Storage, Transfer and
+Query bootstrap. Consumers obtain an Abstract and bind the capabilities they
+need. The host keeps a module loaded through the final use and release of its
+interfaces.
 
-The repository builds two SDK packages for independently developed consumers:
+The CPU module runs independently of NVIDIA libraries. CUDA also exposes its
+platform contracts and native C++ runtime for consumers that need to compile
+CUDA source or manage device work directly. The shared Compute contracts remain
+independent of both engine implementations.
 
-| Package | Provides | Targets |
-| --- | --- | --- |
-| Compute | Shared image contracts, selection, host image storage and the CPU provider | Linux, Windows, Wasm |
-| CUDA | The CUDA image provider, source compilation, prepared kernels and device buffers | Linux, Windows |
+The bundle contains a separate package for each module, with public headers and
+static and shared libraries. Compute and CPU target Linux, Windows and Wasm;
+CUDA targets Linux and Windows. See [Using the Compute SDKs](SDK.md) for entry
+points, package selection and independent consumption.
 
-Both packages contain C contract headers, C++ interfaces, and static and shared
-libraries. The Compute runtime depends on TTX and
-[Perimortem](https://github.com/tetrodotoxin-dev/Perimortem). CUDA uses the shared
-Compute contracts and supplies its own runtime implementation. The CPU package
-can run independently of NVIDIA libraries.
-
-Consumers that need CUDA-specific behavior can use its compilation and device
-contracts directly, or the native C++ runtime with NVIDIA's headers. Portable
-operations such as Invert have an implementation for each supported provider;
-CUDA source compilation remains a CUDA capability.
-
-See [Using the Compute SDKs](SDK.md) for the module entry points, lifetime
-requirements and package layout. The Compute 0.4 SDKs are under development;
-existing releases preserve the earlier CUDA-only interface.
+Download the [Compute 0.1.0 SDK bundle](https://github.com/tetrodotoxin-dev/Compute/releases/tag/v0.1.0)
+for the shared contracts and both engine implementations.
 
 ## Building and testing
 
@@ -95,13 +87,13 @@ bazel build //source/...
 bazel run :tests --config=release
 bazel run :benchmarks --config=release
 bazel build :sdk --config=release
-bazel build :cuda_sdk --config=release
 bazel run :snapshot
 ```
 
-Tests and benchmarks are standalone executables. `:sdk` packages Compute, and
-`:cuda_sdk` packages the optional CUDA platform. A snapshot archives the clean
-Git commit that reproduces the source and validation state.
+Tests and benchmarks are standalone executables. `:sdk` builds the complete
+bundle. Use `:compute_sdk`, `:cpu_sdk` or `:cuda_sdk` to package one module. A
+snapshot archives the clean Git commit that reproduces the source and
+validation state.
 
 For VS Code tasks, debugging and header navigation, run `bazel run :vscode`.
 

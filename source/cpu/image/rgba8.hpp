@@ -11,7 +11,7 @@
 
 #include "compute/image/pixels.hpp"
 
-namespace Compute::Image {
+namespace Cpu::Image {
 
 // Rgba8 publishes a host image snapshot. Creation copies the supplied pixels
 // into independent storage and returns one Retained acquisition. Every later
@@ -21,7 +21,7 @@ namespace Compute::Image {
 // across all bindings and independent acquisitions.
 class Rgba8 {
  public:
-  static EXPORTED(COMPUTE) auto
+  static EXPORTED(CPU) auto
       create(U32 width, U32 height, Perimortem::Core::View::Bytes pixels)
           -> Perimortem::Core::Storage::
               Result<Ttx::Graph::Policies::Retained, compute_image_status>;
@@ -53,4 +53,4 @@ class Rgba8 {
   Perimortem::Memory::Global::Bytes pixels;
 };
 
-}  // namespace Compute::Image
+}  // namespace Cpu::Image

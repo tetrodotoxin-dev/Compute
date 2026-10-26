@@ -1,7 +1,7 @@
 // # Tetrodotoxin
 // Copyright (c) 2023-present Matt Kaes and contributors
 
-#include "compute/image/rgba8.hpp"
+#include "cpu/image/rgba8.hpp"
 
 #include "toolchain/memory/lifetime.hpp"
 
@@ -15,6 +15,7 @@ using namespace Perimortem::Memory;
 using namespace Toolchain::Memory;
 using namespace Ttx::Graph;
 using namespace Compute::Image;
+using namespace Cpu::Image;
 
 auto Rgba8::create(U32 width, U32 height, View::Bytes pixels)
     -> Storage::Result<Policies::Retained, compute_image_status> {

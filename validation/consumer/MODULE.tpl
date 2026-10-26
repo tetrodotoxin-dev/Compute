@@ -29,3 +29,18 @@ sdks.release(
     ],
 )
 use_repo(sdks, "compute")
+
+sdks.release(
+    name = "cpu",
+    archives = {cpu_archives},
+    library = "cpu",
+    linkage = "{linkage}",
+    project = "Compute",
+    version = "{version}",
+    deps = [
+        "@perimortem{suffix}//:core",
+        "@perimortem{suffix}//:memory",
+        "@ttx{suffix}//:graph",
+    ],
+)
+use_repo(sdks, "cpu")

@@ -16,7 +16,6 @@
 #include "compute/execution/selection.hpp"
 #include "compute/image/invert.hpp"
 #include "compute/image/pixels.hpp"
-#include "compute/platforms/cpu.hpp"
 #include "compute/policies/accelerated.h"
 #include "validation/tests/generated.h"
 
@@ -28,7 +27,6 @@ using namespace Ttx::Data;
 using namespace Ttx::Graph;
 using namespace Ttx::Semantic;
 using namespace Compute::Execution;
-using namespace Compute::Platforms;
 using namespace Compute::Image;
 
 static Harness Engines = {.name = "Compute::Substitution"};
@@ -83,12 +81,12 @@ class Provider {
 
 #ifdef TOOLCHAIN_WINDOWS
 
-static constexpr auto cpu_library = "compute.dll"_view;
+static constexpr auto cpu_library = "ttx_cpu.dll"_view;
 static constexpr auto cuda_library = "ttx_cuda.dll"_view;
 
 #else
 
-static constexpr auto cpu_library = "libcompute.so"_view;
+static constexpr auto cpu_library = "libttx_cpu.so"_view;
 static constexpr auto cuda_library = "libttx_cuda.so"_view;
 
 #endif

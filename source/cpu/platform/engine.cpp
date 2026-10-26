@@ -1,7 +1,7 @@
 // # Tetrodotoxin
 // Copyright (c) 2023-present Matt Kaes and contributors
 
-#include "compute/platforms/cpu.hpp"
+#include "cpu/platform/engine.hpp"
 
 #include "perimortem/core/view/null_terminated.hpp"
 
@@ -9,14 +9,15 @@
 #include "ttx/graph/policies/none.h"
 
 #include "compute/image/invert.hpp"
-#include "compute/image/rgba8.hpp"
 #include "compute/policies/accelerated.h"
+#include "cpu/image/rgba8.hpp"
 
 using namespace Perimortem::Core;
 using namespace Perimortem::Memory;
 using namespace Ttx::Graph;
 using namespace Compute::Image;
-using namespace Compute::Platforms;
+using namespace Cpu::Image;
+using namespace Cpu::Platform;
 
 static U8 engine_context, factory_context;
 class CpuProvider {
@@ -202,6 +203,6 @@ const ttx_abstract_ops CpuProvider::engine_operations = {
 const ttx_abstract_ops CpuProvider::factory_operations = {
   factory_supports, factory_bind, empty_route, empty_visit, state};
 
-auto Cpu::factory() -> Abstract {
+auto Engine::factory() -> Abstract {
   return Abstract(CpuProvider::factory_graph(&factory_context));
 }
