@@ -33,10 +33,6 @@ Kernel::Kernel(
   arguments.resize(this->offsets.get_size());
 }
 
-Kernel::~Kernel() {
-  program.release();
-}
-
 auto Kernel::prepare(
     Program& program,
     perimortem_view_bytes entry,
@@ -288,10 +284,14 @@ auto Kernel::acquire(void* context, ttx_retained* output)
   return TTX_NEGOTIATION_SATISFIED;
 }
 
-auto Kernel::release_context(void* context) -> void {
+auto Kernel::release_context(void* context) -> ttx_release_status {
   auto* value = Data::cast<Kernel>(context);
   if (--value->references == 0) {
+    const auto outcome = value->program.release();
     value->~Kernel();
     Allocator::Global::release(Data::cast<U8>(value));
+    return ttx_release_status(outcome);
   }
+
+  return TTX_RELEASE_SUCCESS;
 }

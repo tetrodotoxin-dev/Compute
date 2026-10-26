@@ -10,6 +10,7 @@
 
 using namespace Cuda::Runtime;
 using namespace Toolchain::Validation;
+using namespace Ttx::Graph;
 
 static Harness Native = {.name = "CUDA::Native"};
 
@@ -39,7 +40,7 @@ VALIDATION_TEST(Native, context_restoration) {
 
             EXPECT_EQ(cuCtxGetCurrent(&after), CUDA_SUCCESS);
             EXPECT(after == before);
-            program.release();
+            EXPECT(program.release() == Policies::Retained::Status::Success);
           },
 
           [&](auto status) { EXPECT(False); });

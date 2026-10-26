@@ -12,6 +12,8 @@ namespace Cuda::Runtime {
 // The final release frees the allocation before releasing that Program.
 // Each acquired Retained result contributes one reference. Plain API copies
 // and bindings share the result that supplied them.
+// Release reports allocation cleanup, context restoration and the Program's
+// cleanup outcome before destroying the provider state.
 class Buffer {
  public:
   Buffer(const Buffer&) = delete;
@@ -28,7 +30,7 @@ class Buffer {
     program.retain();
   }
 
-  ~Buffer();
+  ~Buffer() = default;
   static auto graph(void* context) -> ttx_abstract;
   static auto supports(void* context, perimortem_uuid id)
       -> ttx_negotiation_status;
@@ -40,7 +42,7 @@ class Buffer {
   static auto get_state(void* context) -> ttx_abstract_state;
   static auto acquire(void* context, ttx_retained* output)
       -> ttx_negotiation_status;
-  static auto release_context(void* context) -> void;
+  static auto release_context(void* context) -> ttx_release_status;
   static auto get_address(void* context) -> U64;
   static auto get_size(void* context) -> Count;
   static auto read(void* context, Count offset, U8* output, Count size)

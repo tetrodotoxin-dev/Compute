@@ -9,8 +9,8 @@
 #include "cuda/contracts/diagnostics.h"
 #include "cuda/contracts/status.h"
 
-#define TTX_CUDA_COMPILER_HIGH 0x0aedfc870b994df5ULL
-#define TTX_CUDA_COMPILER_LOW 0xa8b09c6793e8b69aULL
+#define TTX_CUDA_COMPILER_HIGH 0x14421902be5141b4ULL
+#define TTX_CUDA_COMPILER_LOW 0xa6b7698f8a109520ULL
 
 // Source supplies a name and text for NVRTC. Names, source, includes and
 // options contain UTF 8 bytes without embedded nulls. The caller keeps every
@@ -34,6 +34,7 @@ typedef struct cuda_compile_request {
 // releases that result after its final use. Compilation failure leaves earlier
 // results usable. The host keeps the provider library loaded through every
 // result's release.
+// The result's release reports cleanup failure through the Retained contract.
 typedef struct cuda_compiler {
   void* context;
   const struct cuda_compiler_ops* operations;

@@ -39,8 +39,10 @@ S32 main() {
               return compiler.compile(request, diagnostics)
                   .visit(
                       [](Policies::Retained result) -> S32 {
-                        result.release();
-                        return 0;
+                        return result.release() ==
+                                       Policies::Retained::Status::Success
+                                   ? 0
+                                   : 6;
                       },
 
                       [](ExecutionStatus status) -> S32 { return 3; });

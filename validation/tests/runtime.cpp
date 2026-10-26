@@ -46,12 +46,15 @@ class Held {
     return Abstract(retained.operations->get_abstract(retained.context));
   }
 
-  auto release() -> void {
+  auto release() -> Policies::Retained::Status {
     if (retained.operations) {
       const auto completed = retained;
       retained = {};
-      completed.operations->release(completed.context);
+      return Policies::Retained::Status(
+          completed.operations->release(completed.context));
     }
+
+    return Policies::Retained::Status::Success;
   }
 
  private:
@@ -84,9 +87,24 @@ static auto bound(Abstract abstract) -> Type {
 }
 
 static auto compiler() -> Compiler {
+  Allocator::Arena errors;
+
+#ifdef TOOLCHAIN_WINDOWS
+
+  constexpr auto path = "ttx_cuda.dll"_view;
+
+#else
+
+  constexpr auto path = "libttx_cuda.so"_view;
+
+#endif
+
+  static auto library = accepted(Process::Library::open(path, errors));
+  const auto* symbol = accepted(library.symbol("ttx_entry"_view, errors));
+  const auto& published = *Data::cast<const ttx_storage>(symbol);
   ttx_semantic_query entry{};
   auto destination = Form::Storage::from(entry).get_abi();
-  if (ttx_transfer(&ttx_entry, &destination) != TTX_DATA_SUCCESS) {
+  if (ttx_transfer(&published, &destination) != TTX_DATA_SUCCESS) {
     Diagnostics::Log::fatal("CUDA bootstrap representation was rejected."_view);
   }
 
@@ -282,8 +300,8 @@ VALIDATION_TEST(CudaTests, retained_launch) {
   // that acquisition, keeping the original result's API unused after release.
   Held second_input(
       accepted(bound<Capabilities::Retain>(input.get_abstract()).retain()));
-  input_lifetime.release();
-  program_lifetime.release();
+  EXPECT(input_lifetime.release() == Policies::Retained::Status::Success);
+  EXPECT(program_lifetime.release() == Policies::Retained::Status::Success);
 
   const auto retained_input = bound<Buffer>(second_input.get_abstract());
   Arguments frame{
@@ -326,6 +344,9 @@ VALIDATION_TEST(CudaTests, retained_launch) {
   }
 
   EXPECT_EQ(Allocator::Bibliotheca::check_out_requests(), allocations);
+  EXPECT(kernel_lifetime.release() == Policies::Retained::Status::Success);
+  EXPECT(second_input.release() == Policies::Retained::Status::Success);
+  EXPECT(output_lifetime.release() == Policies::Retained::Status::Success);
 }
 
 VALIDATION_TEST(CudaTests, substituted_contexts) {

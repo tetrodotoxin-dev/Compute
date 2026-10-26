@@ -146,10 +146,22 @@ S32 cuda_validate_entry(const ttx_storage* published) {
   }
 
   additional_live = 1;
-  buffer_lifetime.operations->release(buffer_lifetime.context);
+
+  const ttx_release_status buffer_released =
+      buffer_lifetime.operations->release(buffer_lifetime.context);
   buffer_live = 0;
-  program_lifetime.operations->release(program_lifetime.context);
+  if (buffer_released != TTX_RELEASE_SUCCESS) {
+    result = 11;
+    goto cleanup;
+  }
+
+  const ttx_release_status program_released =
+      program_lifetime.operations->release(program_lifetime.context);
   program_live = 0;
+  if (program_released != TTX_RELEASE_SUCCESS) {
+    result = 11;
+    goto cleanup;
+  }
 
   result = 9;
   abstract = additional.operations->get_abstract(additional.context);
@@ -179,15 +191,24 @@ S32 cuda_validate_entry(const ttx_storage* published) {
   result = 0;
 cleanup:
   if (additional_live) {
-    additional.operations->release(additional.context);
+    if (additional.operations->release(additional.context) !=
+        TTX_RELEASE_SUCCESS) {
+      result = 11;
+    }
   }
 
   if (buffer_live) {
-    buffer_lifetime.operations->release(buffer_lifetime.context);
+    if (buffer_lifetime.operations->release(buffer_lifetime.context) !=
+        TTX_RELEASE_SUCCESS) {
+      result = 11;
+    }
   }
 
   if (program_live) {
-    program_lifetime.operations->release(program_lifetime.context);
+    if (program_lifetime.operations->release(program_lifetime.context) !=
+        TTX_RELEASE_SUCCESS) {
+      result = 11;
+    }
   }
 
   return result;

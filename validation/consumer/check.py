@@ -1,6 +1,6 @@
 # Copyright (c) 2023-present Matt Kaes and contributors
 
-"""Build CUDA's SDK and consume its pinned archives from a separate workspace.
+"""Build Compute and CUDA SDKs and consume them from a separate workspace.
 
 Run `python3 validation/consumer/check.py` from a source checkout. Additional
 Bazel flags are forwarded to each build, allowing an explicitly approved local
@@ -25,18 +25,22 @@ def check():
     repository = Path(__file__).resolve().parents[2]
     fixtures = repository / "validation/consumer"
     flags = ["--config=release", *sys.argv[1:]]
-    subprocess.run(["bazel", "build", ":sdk", *flags], cwd=repository, check=True)
+    subprocess.run(["bazel", "build", ":sdk", ":cuda_sdk", *flags], cwd=repository, check=True)
     directory = Path(subprocess.check_output(
         ["bazel", "info", "bazel-bin", *flags], cwd=repository, text=True).strip())
     source_module = (repository / "MODULE.bazel").read_text()
     version = re.search(r'version\s*=\s*"([^"]+)"', source_module).group(1)
     prefix = "cuda-" + version + "-"
-    pins = {}
-    for line in (directory / (prefix + "sha256.txt")).read_text().splitlines():
-        digest, name = line.split()
-        if hashlib.sha256((directory / name).read_bytes()).hexdigest() != digest:
-            raise ValueError("SDK checksum mismatch: " + name)
-        pins[name.removeprefix(prefix).removesuffix(".zip")] = digest
+    packages = {}
+    for package in ["cuda", "compute"]:
+        package_prefix = package + "-" + version + "-"
+        pins = {}
+        for line in (directory / (package_prefix + "sha256.txt")).read_text().splitlines():
+            digest, name = line.split()
+            if hashlib.sha256((directory / name).read_bytes()).hexdigest() != digest:
+                raise ValueError("SDK checksum mismatch: " + name)
+            pins[name.removeprefix(package_prefix).removesuffix(".zip")] = digest
+        packages[package] = pins
 
     # The consumer uses binary SDKs. NVIDIA source acquisition stays with the
     # producer; its link interfaces and runtime dependencies come from the SDK.
@@ -54,13 +58,13 @@ def check():
         for name in ["consumer.c", "consumer.h"]:
             shutil.copyfile(repository / "validation/tests" / name,
                             workspace / "validation/tests" / name)
-        for name in ["consumer.c", "consumer.cpp"]:
+        for name in ["consumer.c", "consumer.cpp", "compute.cpp"]:
             shutil.copyfile(fixtures / name, workspace / "validation/consumer" / name)
         command = ["bazel", "--batch", "--output_base=" + str(root / "bazel")]
-        targets = [":c_consumer", ":cpp_consumer"]
+        targets = [":c_consumer", ":cpp_consumer", ":compute_consumer"]
         for linkage in ["static", "shared"]:
             module = dependencies + (fixtures / "MODULE.tpl").read_text()
-            for key, value in {"archives": repr(pins), "version": version,
+            for key, value in {"archives": repr(packages["cuda"]), "compute_archives": repr(packages["compute"]), "version": version,
                                "linkage": linkage, "suffix": "_static" if linkage == "static" else ""}.items():
                 module = module.replace("{" + key + "}", value)
             (workspace / "MODULE.bazel").write_text(module)
@@ -74,7 +78,7 @@ def check():
                 dynamic = subprocess.check_output(["readelf", "-d", str(binary)], text=True)
                 required = re.findall(r"\(NEEDED\)[^\n]*\[([^\]]+)\]", dynamic)
                 if linkage == "static" and any(name in required for name in
-                                               ["libttx_cuda.so", "libttx.so", "libperimortem.so"]):
+                                               ["libcompute.so", "libttx_cuda.so", "libttx.so", "libperimortem.so"]):
                     raise ValueError("Static consumer requires a first-party shared library")
                 if linkage == "shared" and "libttx_cuda.so" not in required:
                     raise ValueError("Shared consumer must use the CUDA shared library")

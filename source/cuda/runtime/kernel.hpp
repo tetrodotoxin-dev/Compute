@@ -15,6 +15,8 @@ namespace Cuda::Runtime {
 // Preparation resolves the CUDA entry and allocates argument pointer scratch.
 // Launches reuse that scratch, so the consumer serializes calls through all
 // bindings of this Kernel, including bindings acquired by separate retention.
+// Final release consumes the Kernel's Program reference and reports its cleanup
+// outcome before destroying the Kernel's host storage.
 class Kernel {
  public:
   Kernel(const Kernel&) = delete;
@@ -35,7 +37,7 @@ class Kernel {
       CUfunction function,
       const ttx_representation& frame,
       Perimortem::Memory::Global::Vector<Count> offsets);
-  ~Kernel();
+  ~Kernel() = default;
   auto launch(cuda_launch geometry, ttx_storage arguments) -> cuda_status;
   static auto graph(void* context) -> ttx_abstract;
   static auto supports(void* context, perimortem_uuid id)
@@ -48,7 +50,7 @@ class Kernel {
   static auto get_state(void* context) -> ttx_abstract_state;
   static auto acquire(void* context, ttx_retained* output)
       -> ttx_negotiation_status;
-  static auto release_context(void* context) -> void;
+  static auto release_context(void* context) -> ttx_release_status;
   static auto launch_context(
       void* context,
       cuda_launch geometry,

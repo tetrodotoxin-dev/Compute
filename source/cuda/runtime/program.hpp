@@ -14,7 +14,8 @@ namespace Cuda::Runtime {
 
 // Program keeps a CUDA primary context reference and its loaded module alive.
 // Native creation returns one reference. Each Kernel and Buffer holds another.
-// The caller serializes use, retention and release on related resources.
+// The caller serializes calls through this Program and every Kernel and Buffer
+// created from it, including all bindings, retention and release operations.
 // The native module and context accessors support CUDA operations supplied by
 // the consuming project. That caller completes its device work before release.
 class Program {
@@ -33,12 +34,16 @@ class Program {
   auto get_context() const -> CUcontext { return context; }
   auto get_module() const -> CUmodule { return module; }
   EXPORTED(CUDA) auto retain() -> void;
-  EXPORTED(CUDA) auto release() -> void;
+  // Consumes one reference. The final release unloads the module and releases
+  // its primary context reference. CleanupFailed reports failure of either
+  // cleanup operation or restoration of the caller's current context. Both
+  // outcomes end this reference's access to the Program.
+  EXPORTED(CUDA) auto release() -> Ttx::Graph::Policies::Retained::Status;
 
  private:
   friend Toolchain::Memory::Lifetime;
   Program() = default;
-  ~Program();
+  ~Program() = default;
   static auto graph(void* context) -> ttx_abstract;
   static auto supports(void* context, perimortem_uuid id)
       -> ttx_negotiation_status;
@@ -50,7 +55,7 @@ class Program {
   static auto get_state(void* context) -> ttx_abstract_state;
   static auto acquire(void* context, ttx_retained* output)
       -> ttx_negotiation_status;
-  static auto release_context(void* context) -> void;
+  static auto release_context(void* context) -> ttx_release_status;
   static auto prepare(
       void* context,
       perimortem_view_bytes entry,

@@ -22,3 +22,12 @@ cc_binary(
     srcs = ["validation/consumer/consumer.cpp"],
     deps = ["@cuda"],
 )
+
+cc_binary(
+    name = "compute_consumer",
+    srcs = ["validation/consumer/compute.cpp"],
+    deps = [
+        "@compute",
+        "@cuda",
+    ],
+)

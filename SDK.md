@@ -1,8 +1,19 @@
-# Using the CUDA SDK
+# Using the Compute SDKs
+
+The Compute package supplies the shared domain and CPU platform through
+`compute/` headers. Its exported `ttx_entry` supplies the CPU Create factory
+through the standard Storage, Transfer, Query and Abstract bootstrap. Engine
+creation uses None for the default configuration. The returned Abstract exposes
+the `invert` route. Retain the engine inside the callback for later use.
+
+The optional CUDA package adds a compiler Abstract whose `engine` route selects
+the CUDA Create factory. Its image operations use the same Compute contracts,
+with device storage private to the provider. Keep both provider modules loaded
+through all operations and releases that use their code.
 
 CUDA's public C records live under `cuda/contracts`. C++ interfaces forward
 those records through the context and operations supplied by the provider.
-The headers use TTX 0.4.0 and Perimortem 0.4.0. The build uses Toolchain 0.4.1.
+The headers use TTX 0.4.1 and Perimortem 0.4.0. The build uses Toolchain 0.4.2.
 
 Load `ttx_entry` as the Storage export described by TTX's native library
 contract. Transfer its Query into local storage, negotiate an Abstract, and
@@ -20,21 +31,21 @@ NVIDIA dependency selected through `//build:fft` in a source checkout.
 
 ## Candidate packaging
 
-The root `:sdk` target declares static and shared Linux and Windows packages.
+The root `:sdk` target declares Compute packages for Linux, Windows and Wasm.
+`:cuda_sdk` declares static and shared CUDA packages for Linux and Windows.
 The library's ordinary source target uses shared TTX and Perimortem, while its
 static variant selects the static dependencies.
 
-SDK packaging requires Toolchain 0.4.2's runtime-only DLL and system interface
-support. The checkout retains its published 0.4.1 pin until that release is
-available. The driver link interfaces accompany the static SDK; the installed
+CUDA packaging uses Toolchain 0.4.2's runtime-only DLL and system interface
+support. The driver link interfaces accompany the static CUDA SDK; the installed
 NVIDIA driver supplies their runtime implementation. NVRTC and its builtins
 are bundled runtime dependencies.
 
-`python3 validation/consumer/check.py` builds the SDK and validates independent
+`python3 validation/consumer/check.py` builds the CUDA SDK and validates independent
 C and C++ consumers in both linkage modes. Linux consumers compile CUDA source
 and exercise retained storage, including from a relocated package. Windows
 consumers are compiled and linked. Additional Bazel arguments can be supplied
 for explicitly approved development experiments.
 
-The CUDA 0.4.0 SDK is not published. NVIDIA runtime distribution and notices
+The Compute and CUDA 0.4.0 SDKs are not published. NVIDIA runtime distribution and notices
 must be checked with the completed package before publication.

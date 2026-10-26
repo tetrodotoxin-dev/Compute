@@ -16,6 +16,7 @@
 #include "ttx/graph/policies/none.h"
 #include "ttx/graph/policies/unknown.h"
 
+#include "cuda/platform/engine.hpp"
 #include "cuda/runtime/buffer.hpp"
 #include "cuda/runtime/current_context.hpp"
 #include "cuda/runtime/kernel.hpp"
@@ -24,6 +25,7 @@ using namespace Perimortem::Core;
 using namespace Perimortem::Memory;
 using namespace Toolchain::Memory;
 using namespace Cuda::Runtime;
+using namespace Cuda::Platform;
 using namespace Ttx::Graph;
 
 static auto valid_text(perimortem_view_bytes bytes) -> Bool {
@@ -281,10 +283,18 @@ class CompilerProvider {
 
   static auto resolve_route(void* context, perimortem_view_bytes route)
       -> ttx_abstract {
+    if (View::Bytes(route) == "engine"_view) {
+      return Engine::factory().get_abi();
+    }
+
     return ttx_none();
   }
 
-  static auto visit_routes(void* context, ttx_graph_visitor visitor) -> void {}
+  static auto visit_routes(void* context, ttx_graph_visitor visitor) -> void {
+    visitor.callback(
+        visitor.callback_context, "engine"_view, Engine::factory().get_abi());
+  }
+
   static auto get_state(void* context) -> ttx_abstract_state {
     return TTX_ABSTRACT_PRESENT;
   }
@@ -316,30 +326,34 @@ auto Program::retain() -> void {
   ++references;
 }
 
-auto Program::release() -> void {
-  if (--references == 0) {
-    this->~Program();
-    Allocator::Global::release(Data::cast<U8>(this));
+auto Program::release() -> Policies::Retained::Status {
+  if (--references) {
+    return Policies::Retained::Status::Success;
   }
-}
 
-Program::~Program() {
+  auto outcome = Policies::Retained::Status::Success;
   if (module) {
-    CurrentContext current(context);
-    auto status = current.status;
-    if (status == CUDA_SUCCESS) {
-      status = cuModuleUnload(module);
-    }
+    if (cuCtxPushCurrent(context) == CUDA_SUCCESS) {
+      if (cuModuleUnload(module) != CUDA_SUCCESS) {
+        outcome = Policies::Retained::Status::CleanupFailed;
+      }
 
-    if (status != CUDA_SUCCESS) {
-      Diagnostics::Log::fatal(
-          "CUDA program could not release its module."_view);
+      CUcontext previous;
+      if (cuCtxPopCurrent(&previous) != CUDA_SUCCESS) {
+        outcome = Policies::Retained::Status::CleanupFailed;
+      }
+    } else {
+      outcome = Policies::Retained::Status::CleanupFailed;
     }
   }
 
   if (context && cuDevicePrimaryCtxRelease(device) != CUDA_SUCCESS) {
-    Diagnostics::Log::fatal("CUDA program could not release its context."_view);
+    outcome = Policies::Retained::Status::CleanupFailed;
   }
+
+  this->~Program();
+  Allocator::Global::release(Data::cast<U8>(this));
+  return outcome;
 }
 
 auto Program::prepare(
@@ -443,6 +457,6 @@ auto Program::acquire(void* context, ttx_retained* output)
   return TTX_NEGOTIATION_SATISFIED;
 }
 
-auto Program::release_context(void* context) -> void {
-  Data::cast<Program>(context)->release();
+auto Program::release_context(void* context) -> ttx_release_status {
+  return ttx_release_status(Data::cast<Program>(context)->release());
 }

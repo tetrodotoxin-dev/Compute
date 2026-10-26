@@ -10,8 +10,8 @@
 #include "cuda/contracts/diagnostics.h"
 #include "cuda/contracts/status.h"
 
-#define TTX_CUDA_PROGRAM_HIGH 0xfcdff2fcbe6d4902ULL
-#define TTX_CUDA_PROGRAM_LOW 0x82a51e833740ff97ULL
+#define TTX_CUDA_PROGRAM_HIGH 0x4ea28ce6140849f5ULL
+#define TTX_CUDA_PROGRAM_LOW 0x8c4c79a60316c2a9ULL
 
 // Each argument supplies a complete canonical form and its offset in the host
 // frame. CUDA verifies parameter counts and sizes against the loaded function.
@@ -25,8 +25,11 @@ typedef struct cuda_argument {
 // Program prepares kernels and allocates device buffers. Each successful
 // operation supplies an independent Retained result whose Abstract binds Kernel
 // or Buffer. Kernels and buffers keep the Program's loaded code and context
-// available after the original Program result is released. Calls on related
-// resources are serialized by the consumer, including retention and release.
+// available after the original Program result is released. The consumer must
+// serialize calls through a Program and every Kernel and Buffer created by it,
+// across all bindings and acquisitions, including retention and release.
+// Final release reports resource or Program cleanup failures under
+// the Retained contract.
 typedef struct cuda_program {
   void* context;
   const struct cuda_program_ops* operations;

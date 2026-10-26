@@ -3,45 +3,17 @@
 
 #include "toolchain/validation/benchmark.hpp"
 
-#include "perimortem/core/diagnostics/log.hpp"
-#include "perimortem/core/view/null_terminated.hpp"
+#include "ttx/graph/capabilities/create.hpp"
 
-#include "ttx/data/transfer.hpp"
-
-#include "cuda/contracts/compiler.hpp"
-#include "cuda/module.h"
+#include "compute/platforms/cpu.hpp"
 
 using namespace Toolchain::Validation;
-using namespace Perimortem::Core;
-using namespace Ttx::Data;
 using namespace Ttx::Graph;
-using namespace Ttx::Semantic;
-using namespace Cuda::Contracts;
+using namespace Compute::Platforms;
 
-static Storage::Option<Abstract> compiler;
+static Harness Negotiation = {.name = "Compute::Negotiation"};
 
-static auto setup() -> void {
-  ttx_semantic_query entry{};
-  auto requested = Form::Storage::from(entry).get_abi();
-  if (ttx_transfer(&ttx_entry, &requested) != TTX_DATA_SUCCESS) {
-    Diagnostics::Log::fatal("CUDA bootstrap representation was rejected."_view);
-  }
-
-  Negotiation::Query(entry).bind<Abstract>().visit(
-      [](Abstract abstract) { compiler = abstract; },
-      [](Negotiation::Status status) {
-        Diagnostics::Log::fatal("CUDA compiler graph was unavailable."_view);
-      });
-}
-
-static Harness CudaNegotiation = {.name = "CUDA::Negotiation", .init = setup};
-
-VALIDATION_BENCHMARK(CudaNegotiation, compiler_binding) {
-  compiler.visit(
-      [](Abstract abstract) {
-        auto result = abstract.bind<Compiler>();
-        Benchmark::prevent_optimization(result);
-      },
-
-      [] {});
+VALIDATION_BENCHMARK(Negotiation, factory_binding) {
+  auto binding = Cpu::factory().bind<Capabilities::Create>();
+  Benchmark::prevent_optimization(binding);
 }

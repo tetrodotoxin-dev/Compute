@@ -5,7 +5,6 @@
 
 #include "toolchain/memory/lifetime.hpp"
 
-#include "perimortem/core/diagnostics/log.hpp"
 #include "perimortem/core/view/null_terminated.hpp"
 #include "perimortem/memory/allocator/global.hpp"
 
@@ -43,23 +42,6 @@ auto Buffer::allocate(Program& program, Count size, ttx_retained* output)
       memory.get_data(), [&] { return Buffer(program, address, size); });
   *output = {&buffer, &retained_operations};
   return CUDA_SUCCESS_STATUS;
-}
-
-Buffer::~Buffer() {
-  {
-    CurrentContext current(program.get_context());
-    auto status = current.status;
-    if (status == CUDA_SUCCESS) {
-      status = cuMemFree(address);
-    }
-
-    if (status != CUDA_SUCCESS) {
-      Diagnostics::Log::fatal(
-          "CUDA buffer could not release its allocation."_view);
-    }
-  }
-
-  program.release();
 }
 
 auto Buffer::get_address(void* context) -> U64 {
@@ -201,10 +183,31 @@ auto Buffer::acquire(void* context, ttx_retained* output)
   return TTX_NEGOTIATION_SATISFIED;
 }
 
-auto Buffer::release_context(void* context) -> void {
+auto Buffer::release_context(void* context) -> ttx_release_status {
   auto* value = Data::cast<Buffer>(context);
-  if (--value->references == 0) {
-    value->~Buffer();
-    Allocator::Global::release(Data::cast<U8>(value));
+  if (--value->references) {
+    return TTX_RELEASE_SUCCESS;
   }
+
+  auto outcome = TTX_RELEASE_SUCCESS;
+  if (cuCtxPushCurrent(value->program.get_context()) == CUDA_SUCCESS) {
+    if (cuMemFree(value->address) != CUDA_SUCCESS) {
+      outcome = TTX_RELEASE_CLEANUP_FAILED;
+    }
+
+    CUcontext previous;
+    if (cuCtxPopCurrent(&previous) != CUDA_SUCCESS) {
+      outcome = TTX_RELEASE_CLEANUP_FAILED;
+    }
+  } else {
+    outcome = TTX_RELEASE_CLEANUP_FAILED;
+  }
+
+  if (value->program.release() != Policies::Retained::Status::Success) {
+    outcome = TTX_RELEASE_CLEANUP_FAILED;
+  }
+
+  value->~Buffer();
+  Allocator::Global::release(Data::cast<U8>(value));
+  return outcome;
 }
