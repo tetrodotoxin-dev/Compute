@@ -6,11 +6,11 @@ module(
 bazel_dep(name = "rules_cc", version = "0.2.17")
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "rules_pkg", version = "1.3.0")
-bazel_dep(name = "tetro_toolchain", version = "0.4.2")
+bazel_dep(name = "tetro_toolchain", version = "0.5.0")
 archive_override(
     module_name = "tetro_toolchain",
-    sha256 = "0cf1344a239f45845d70c454127b1ebe3ca702a8bdbd6cbb3214880111c77a2f",
-    urls = ["https://github.com/tetrodotoxin-dev/Toolchain/releases/download/v0.4.2/tetro_toolchain-0.4.2-source.tar.gz"],
+    sha256 = "7ac4907656d23993b1912982e25741277e79f42ddc0a2792052f9acaa9a5b57b",
+    urls = ["https://github.com/tetrodotoxin-dev/Toolchain/releases/download/v0.5.0/tetro_toolchain-0.5.0-source.tar.gz"],
 )
 
 register_toolchains("@tetro_toolchain//:cc_toolchain_for_linux_x86_64", "@tetro_toolchain//:cc_toolchain_for_wasm32", "@tetro_toolchain//:cc_toolchain_for_wasm32_runner", "@tetro_toolchain//:cc_toolchain_for_windows_x64")
@@ -18,13 +18,13 @@ register_toolchains("@tetro_toolchain//:cc_toolchain_for_linux_x86_64", "@tetro_
 sdks = use_extension("@tetro_toolchain//source/bazel:sdk.bzl", "dependencies")
 
 _PERIMORTEM_ARCHIVES = {
-    "headers": "a5a474fa6548f0e0bb810213bd76760b8ad9d602ee99d35b6f3f884f85f05f98",
-    "linux-x86_64-v3-static": "a81ebd1c1194012f3149e88a0e52228e341fecc4125279b195ad3b58e4124e5e",
-    "linux-x86_64-v3-shared": "f1cec0d68f49dd1e682188cefca7589f245ea91bf786dada57899eac2a124dab",
-    "windows-x86_64-msvc-static": "0e5b4c45a96a85806a3596aef75493894f0eec0a74e7df16657f2c4d7c13cbbb",
-    "windows-x86_64-msvc-shared": "ea1f94b27941ec054ec055f8540952b894cbd1435279c974e599df60304d494a",
-    "wasm32-emscripten-static": "cd12c04c5e418599bd4d08e54116afbaba99f571f340db68f2bd158dc62dd677",
-    "wasm32-emscripten-shared": "ba1bf3dc7bdf7d9fbfd4071761d342fa03f378225b55e1e60d78d67765408534",
+    "headers": "fe0b8ed404ad5dcb333761e8f641b8fe1b73a82f8a9568019b43d39883689369",
+    "linux-x86_64-v3-static": "54c24c6a02f04eeb1da34d9dea87302ca9e25983dceebede25c7937b4b3a7ee6",
+    "linux-x86_64-v3-shared": "fcb56691a556fd6d49029a9c3238865797666d93b3f4b5a182c020337a776fe1",
+    "windows-x86_64-msvc-static": "5b758ad0c0dcdd05cfa960ca79bd4912cb23cb70c5ac723ac0b578eddba6d617",
+    "windows-x86_64-msvc-shared": "6be7c075a213dc4f6040322ef2e32e43ee2eb2efc45eb04613a3fbb0b565ac8c",
+    "wasm32-emscripten-static": "0eb4422a6175e5adaedba7693a91cb3b53cbccbb98a99cd4e46f6ca45d82db46",
+    "wasm32-emscripten-shared": "96375f5c7e64e0cb85a909244ce5d747720c96bd320042cf28133406036f4bf2",
 }
 
 sdks.release(
@@ -32,7 +32,7 @@ sdks.release(
     archives = _PERIMORTEM_ARCHIVES,
     linkage = "shared",
     project = "Perimortem",
-    version = "0.4.0",
+    version = "0.5.0",
     deps = [],
 )
 sdks.release(
@@ -41,19 +41,19 @@ sdks.release(
     library = "perimortem",
     linkage = "static",
     project = "Perimortem",
-    version = "0.4.0",
+    version = "0.5.0",
     deps = [],
 )
 use_repo(sdks, "perimortem", "perimortem_static")
 
 _CUDA_TTX_ARCHIVES = {
-    "headers": "1e8e852c8b234bbe077c0755463f316bd9ff7d0439726403cd2343642a7d0905",
-    "linux-x86_64-v3-shared": "9dc605802c8c7273c018851504bde6114eb37ec44c46a2c4c44d06721cfca813",
-    "linux-x86_64-v3-static": "e48a3d0a73438639fd6383be13af5486a779218ddcc9728355be52c435319125",
-    "windows-x86_64-msvc-shared": "a7c924ea0a615037bafadebf4e2ff2f6282aec5d1d11d33ecfd6b9fe89cc0f6e",
-    "windows-x86_64-msvc-static": "0ae8b55bd41cd8d1de1de4c8e30e810a88a0d634c40689e5e0b17034766b350d",
-    "wasm32-emscripten-shared": "ca9590cd8af9fbb12ac6fdbf86fa1eb17c990a6ee5870645dc9f9e6a6520592d",
-    "wasm32-emscripten-static": "94ae3d67061f226bf0a8fe04a5ab2d6bc41725571ad62a9991b51847dee9b39e",
+    "headers": "cb18f5433ae552a0f8e005b5d8cb15040f63c160af0fdff4aabbe50b27966c17",
+    "linux-x86_64-v3-shared": "e0ffac476b16d0b8a670ac3347dca44356ced1a35dd96e0f015f7d4007c7c77c",
+    "linux-x86_64-v3-static": "ece5469d50c861d6906cdb3b908900939803101ace33324e18ff87a814a8a2c4",
+    "wasm32-emscripten-shared": "fe3c01d69aad0bce07a90d00a44894410d972e8260ea3abed9afd2970ccff0ff",
+    "wasm32-emscripten-static": "531418dc277ed7f85ba803471abb21f923ab71887b222cce169ce9648c9ac4f5",
+    "windows-x86_64-msvc-shared": "fedd42c8ee01e324e86d24abc6da07f73ec393a8d6120d07491e0eb532891cbc",
+    "windows-x86_64-msvc-static": "44087840a490976e24e9485a7d28cf0e4c4f116f265c4402c1e54852eac6cbaa",
 }
 
 sdks.release(
@@ -61,7 +61,7 @@ sdks.release(
     archives = _CUDA_TTX_ARCHIVES,
     linkage = "shared",
     project = "TTX",
-    version = "0.4.1",
+    version = "0.5.0",
     deps = [
         "@perimortem//:core",
         "@perimortem//:memory",
@@ -73,7 +73,7 @@ sdks.release(
     library = "ttx",
     linkage = "static",
     project = "TTX",
-    version = "0.4.1",
+    version = "0.5.0",
     deps = [
         "@perimortem_static//:core",
         "@perimortem_static//:memory",
