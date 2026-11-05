@@ -3,10 +3,10 @@
 """Build the Compute SDK bundle and consume it from a separate workspace.
 
 Run `python3 validation/consumer/check.py` from a source checkout. Additional
-Bazel flags are forwarded to each build, allowing an explicitly approved local
-Toolchain override during development. Perimortem and TTX keep their source
-module's published pins. Linux consumers execute the C lifetime and GPU checks;
-Windows consumers establish compilation and linkage.
+Bazel flags are forwarded to each build. Linux consumers exercise C bootstrap,
+C++ binding and the CPU Engine lifetime. CUDA consumers stop after binding the
+factory, so validation does not initialize a device. Windows consumers
+establish compilation and linkage.
 """
 
 import hashlib
@@ -47,25 +47,54 @@ def check():
     dependencies = source_module.split('cuda = use_extension("//build:sdk.bzl"', 1)[0]
     dependencies = re.sub(r"\Amodule\([\s\S]*?\)",
                           'module(name="cuda_consumer")', dependencies, count=1)
+    # Compute currently develops against the unreleased Coherence SDK and the
+    # local TTX revision that defines its reflection contracts. Preserve those
+    # declared source boundaries when relocating the consumer workspace.
+    dependencies = dependencies.replace(
+        'path = "../ttx"', f'path = "{repository.parent / "ttx"}"')
+    dependencies = dependencies.replace(
+        'path = "../coherence"',
+        f'path = "{repository.parent / "coherence"}"')
     with tempfile.TemporaryDirectory(prefix="cuda-sdk-consumer-") as temporary:
         root = Path(temporary)
         workspace = root / "consumer"
-        (workspace / "validation/tests").mkdir(parents=True)
-        (workspace / "validation/consumer").mkdir()
+        (workspace / "validation/consumer").mkdir(parents=True)
         for name in [".bazelrc", ".bazelversion"]:
             shutil.copyfile(repository / name, workspace / name)
         shutil.copyfile(fixtures / "BUILD.tpl", workspace / "BUILD")
-        for name in ["consumer.c", "consumer.h", "compute.cpp", "deferred.c", "deferred.h", "generated.c", "generated.h"]:
-            shutil.copyfile(repository / "validation/tests" / name,
-                            workspace / "validation/tests" / name)
-        for name in ["consumer.c", "consumer.cpp", "compute.cpp"]:
+        for name in ["bootstrap.c", "typed.cpp"]:
             shutil.copyfile(fixtures / name, workspace / "validation/consumer" / name)
         command = ["bazel", "--batch", "--output_base=" + str(root / "bazel")]
-        targets = [":c_consumer", ":cpp_consumer", ":cpu_consumer", ":compute_consumer"]
+        targets = [
+            ":cpu_c_consumer",
+            ":cpu_cpp_consumer",
+            ":cuda_c_consumer",
+            ":cuda_cpp_consumer",
+        ]
         for linkage in ["static", "shared"]:
             module = dependencies + (fixtures / "MODULE.tpl").read_text()
-            for key, value in {"archives": repr(packages["cuda"]), "compute_archives": repr(packages["compute"]), "cpu_archives": repr(packages["cpu"]), "version": version,
-                               "linkage": linkage, "suffix": "_static" if linkage == "static" else ""}.items():
+            for key, value in {
+                "archives": repr(packages["cuda"]),
+                "coherence_dependency": (
+                    '"@coherence//source:coherence_static",'
+                    if linkage == "static"
+                    else ""
+                ),
+                "compute_archives": repr(packages["compute"]),
+                "cpu_archives": repr(packages["cpu"]),
+                "linkage": linkage,
+                "perimortem": (
+                    "@perimortem_static//:memory"
+                    if linkage == "static"
+                    else "@perimortem//:headers"
+                ),
+                "ttx": (
+                    "@ttx//source:ttx_static"
+                    if linkage == "static"
+                    else "@ttx//source:ttx_headers"
+                ),
+                "version": version,
+            }.items():
                 module = module.replace("{" + key + "}", value)
             (workspace / "MODULE.bazel").write_text(module)
             options = [*flags, "--distdir=" + str(directory)]
@@ -80,18 +109,21 @@ def check():
                 if linkage == "static" and any(name in required for name in
                                                ["libcompute.so", "libttx_cpu.so", "libttx_cuda.so", "libttx.so", "libperimortem.so"]):
                     raise ValueError("Static consumer requires a first-party shared library")
-                if target == ":cpu_consumer" and any("cuda" in name or "nvrtc" in name for name in required):
+                if target.startswith(":cpu_") and any("cuda" in name or "nvrtc" in name for name in required):
                     raise ValueError("CPU consumer requires a CUDA runtime library")
                 if linkage == "shared":
-                    providers = ["libttx_cpu.so"] if target == ":cpu_consumer" else ["libttx_cuda.so"]
-                    if target == ":compute_consumer":
-                        providers.append("libttx_cpu.so")
+                    providers = [
+                        "libttx_cpu.so"
+                        if target.startswith(":cpu_")
+                        else "libttx_cuda.so"
+                    ]
                     if any(name not in required for name in providers):
                         raise ValueError("Shared consumer must use its provider libraries")
                 print(f"{linkage} {binary.name}: {binary.stat().st_size:,} bytes; "
                       f"dependencies: {', '.join(required)}", flush=True)
             if linkage == "shared":
-                shutil.copyfile(output / "c_consumer", root / "shared-consumer")
+                shutil.copyfile(
+                    output / "cuda_c_consumer", root / "shared-consumer")
             subprocess.run([*command, "build", *targets, *options,
                             "--platforms=@tetro_toolchain//:windows_x64"], cwd=workspace, check=True)
             print(linkage + " SDK consumers built for Windows.", flush=True)
@@ -117,7 +149,7 @@ def check():
             path = (relocated / library["library"]).resolve()
             if path not in loaded:
                 raise ValueError("Relocated consumer did not load its packaged " + path.name)
-        print("Relocated CUDA compilation and retained storage passed using packaged runtimes.", flush=True)
+        print("Relocated CUDA factory bootstrap passed using packaged runtimes.", flush=True)
 
 
 if __name__ == "__main__":

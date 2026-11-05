@@ -1,24 +1,8 @@
 # Copyright (c) 2023-present Matt Kaes and contributors
 
-load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@tetro_toolchain//:defs.bzl", "WINDOWS", "library")
 
 package(default_visibility = ["//visibility:public"])
-
-cc_library(
-    name = "compute_headers",
-    hdrs = glob([
-        "compute/execution/commands.h",
-        "compute/execution/commands.hpp",
-        "compute/execution/dependency.h",
-        "compute/execution/dependency.hpp",
-        "compute/execution/status.h",
-        "compute/image/*.h",
-        "compute/image/*.hpp",
-        "compute/policies/*.h",
-    ]),
-    includes = ["."],
-)
 
 library(
     name = "compute_static",
@@ -30,8 +14,9 @@ library(
     includes = ["."],
     module = "compute",
     deps = [
+        "@coherence//source:coherence_static",
         "@perimortem_static//:memory",
-        "@ttx_static//:graph",
+        "@ttx//source:ttx_static",
     ],
 )
 
@@ -50,6 +35,7 @@ library(
         "//conditions:default": "libcompute.so",
     }),
     deps = [
+        "@coherence//:type_system",
         "@perimortem//:memory",
         "@ttx//:graph",
     ],
@@ -68,9 +54,9 @@ library(
     includes = ["."],
     module = "cpu",
     deps = [
-        ":compute_headers",
+        ":compute_static",
         "@perimortem_static//:memory",
-        "@ttx_static//:graph",
+        "@ttx//source:ttx_static",
     ],
 )
 
@@ -92,7 +78,7 @@ library(
         "//conditions:default": "libttx_cpu.so",
     }),
     deps = [
-        ":compute_headers",
+        ":compute_shared",
         "@perimortem//:memory",
         "@ttx//:graph",
     ],
@@ -126,10 +112,10 @@ library(
     includes = ["."],
     module = "cuda",
     deps = [
-        ":compute_headers",
+        ":compute_static",
         "//build:driver_headers",
         "@perimortem_static//:memory",
-        "@ttx_static//:graph",
+        "@ttx//source:ttx_static",
     ],
 )
 
@@ -146,7 +132,7 @@ library(
         "//conditions:default": "libttx_cuda.so",
     }),
     deps = [
-        ":compute_headers",
+        ":compute_shared",
         "//build:driver_headers",
         "@perimortem//:memory",
         "@ttx//:graph",

@@ -50,7 +50,6 @@ format()
 snapshot()
 
 validation(
-    benchmark_deps = [":cpu"],
     test_data = [
         "//source:cpu_shared",
         "//source:cuda_shared",
@@ -59,6 +58,7 @@ validation(
         ":cpu",
         ":cuda",
         "//build:driver",
+        "@coherence//:compilation",
         "@perimortem//:system",
     ],
     deps = [":compute"],
@@ -69,16 +69,11 @@ vscode()
 cc_binary(
     name = "cpu_tests",
     testonly = True,
-    srcs = [
-        "validation/tests/compute.cpp",
-        "validation/tests/deferred.c",
-        "validation/tests/deferred.h",
-        "validation/tests/generated.c",
-        "validation/tests/generated.h",
-    ],
+    srcs = ["validation/tests/typed.cpp"],
     deps = [
         ":compute",
         ":cpu",
+        "@coherence//:compilation",
         "@tetro_toolchain//source/toolchain/validation:test",
     ],
 )

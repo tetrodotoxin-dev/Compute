@@ -1,16 +1,15 @@
 // # Tetrodotoxin
 // Copyright (c) 2023-present Matt Kaes and contributors
 
+#include <cuda.h>
+
 #include "toolchain/validation/test.hpp"
 
-#include "perimortem/core/view/null_terminated.hpp"
+#include "compute/execution/engine.hpp"
+#include "cuda/runtime/engine.hpp"
 
-#include "cuda/runtime/current_context.hpp"
-#include "cuda/runtime/program.hpp"
-
-using namespace Cuda::Runtime;
+using namespace Compute::Execution;
 using namespace Toolchain::Validation;
-using namespace Ttx::Graph;
 
 static Harness Native = {.name = "CUDA::Native"};
 
@@ -19,29 +18,20 @@ VALIDATION_TEST(Native, context_restoration) {
   ASSERT_EQ(cuInit(0), CUDA_SUCCESS);
   ASSERT_EQ(cuCtxGetCurrent(&before), CUDA_SUCCESS);
 
-  const cuda_compile_request request{
-    {"empty.cu"_view, "extern \"C\" __global__ void empty() {}"_view},
-    nullptr,
-    0,
-    nullptr,
-    0,
-    0};
+  const auto created = Cuda::Runtime::Engine::create();
+  ASSERT_EQ(created.status, COMPUTE_EXECUTION_SUCCESS);
 
-  Program::create(request, {})
-      .visit(
-          [&](Program& program) {
-            EXPECT(program.get_module() != nullptr);
-            {
-              CurrentContext current(program.get_context());
-              EXPECT_EQ(current.status, CUDA_SUCCESS);
-              EXPECT_EQ(cuCtxGetCurrent(&after), CUDA_SUCCESS);
-              EXPECT(after == program.get_context());
-            }
+  Engine engine(created.engine);
+  engine.create_commands().visit(
+      [&](Commands commands) {
+        EXPECT_EQ(cuCtxGetCurrent(&after), CUDA_SUCCESS);
+        EXPECT(after == before);
+        EXPECT_EQ(commands.release(), COMPUTE_EXECUTION_SUCCESS);
+      },
 
-            EXPECT_EQ(cuCtxGetCurrent(&after), CUDA_SUCCESS);
-            EXPECT(after == before);
-            EXPECT(program.release() == Policies::Retained::Status::Success);
-          },
+      [&](compute_execution_status status) { EXPECT(False); });
 
-          [&](auto status) { EXPECT(False); });
+  EXPECT_EQ(cuCtxGetCurrent(&after), CUDA_SUCCESS);
+  EXPECT(after == before);
+  EXPECT_EQ(engine.release(), COMPUTE_EXECUTION_SUCCESS);
 }

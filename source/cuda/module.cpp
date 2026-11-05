@@ -3,9 +3,10 @@
 
 #include "cuda/module.h"
 
-#include "ttx/semantic/negotiation/query.hpp"
-
+#include "compute/execution/factory.hpp"
+#include "cuda/runtime/engine.hpp"
 #include "cuda/runtime/program.hpp"
+#include "ttx/semantic/negotiation/query.hpp"
 
 using namespace Ttx::Data;
 using namespace Cuda::Runtime;
@@ -19,6 +20,17 @@ C_LINKAGE HIDDEN constinit const ttx_representation cuda_query_representation =
         Form::Native<ttx_semantic_query>::reference>::get_representation()
         .get_abi();
 
+C_LINKAGE HIDDEN constinit const ttx_representation
+    cuda_factory_representation =
+        Form::Compiled<
+            Form::Native<compute_factory>::reference>::get_representation()
+            .get_abi();
+
+C_LINKAGE HIDDEN auto cuda_create_engine(void* context)
+    -> compute_engine_result {
+  return Cuda::Runtime::Engine::create();
+}
+
 C_LINKAGE HIDDEN auto cuda_factory() -> ttx_abstract {
-  return Program::compiler().get_abi();
+  return Engine::factory().get_abi();
 }

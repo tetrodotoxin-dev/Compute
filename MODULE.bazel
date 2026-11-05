@@ -7,11 +7,15 @@ bazel_dep(name = "rules_cc", version = "0.2.17")
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "rules_pkg", version = "1.3.0")
 bazel_dep(name = "tetro_toolchain", version = "0.5.0")
+bazel_dep(name = "ttx", version = "0.5.0")
+bazel_dep(name = "coherence", version = "0.1.0")
 archive_override(
     module_name = "tetro_toolchain",
     sha256 = "7ac4907656d23993b1912982e25741277e79f42ddc0a2792052f9acaa9a5b57b",
     urls = ["https://github.com/tetrodotoxin-dev/Toolchain/releases/download/v0.5.0/tetro_toolchain-0.5.0-source.tar.gz"],
 )
+local_path_override(module_name = "ttx", path = "../ttx")
+local_path_override(module_name = "coherence", path = "../coherence")
 
 register_toolchains("@tetro_toolchain//:cc_toolchain_for_linux_x86_64", "@tetro_toolchain//:cc_toolchain_for_wasm32", "@tetro_toolchain//:cc_toolchain_for_wasm32_runner", "@tetro_toolchain//:cc_toolchain_for_windows_x64")
 
@@ -45,41 +49,6 @@ sdks.release(
     deps = [],
 )
 use_repo(sdks, "perimortem", "perimortem_static")
-
-_CUDA_TTX_ARCHIVES = {
-    "headers": "cb18f5433ae552a0f8e005b5d8cb15040f63c160af0fdff4aabbe50b27966c17",
-    "linux-x86_64-v3-shared": "e0ffac476b16d0b8a670ac3347dca44356ced1a35dd96e0f015f7d4007c7c77c",
-    "linux-x86_64-v3-static": "ece5469d50c861d6906cdb3b908900939803101ace33324e18ff87a814a8a2c4",
-    "wasm32-emscripten-shared": "fe3c01d69aad0bce07a90d00a44894410d972e8260ea3abed9afd2970ccff0ff",
-    "wasm32-emscripten-static": "531418dc277ed7f85ba803471abb21f923ab71887b222cce169ce9648c9ac4f5",
-    "windows-x86_64-msvc-shared": "fedd42c8ee01e324e86d24abc6da07f73ec393a8d6120d07491e0eb532891cbc",
-    "windows-x86_64-msvc-static": "44087840a490976e24e9485a7d28cf0e4c4f116f265c4402c1e54852eac6cbaa",
-}
-
-sdks.release(
-    name = "ttx",
-    archives = _CUDA_TTX_ARCHIVES,
-    linkage = "shared",
-    project = "TTX",
-    version = "0.5.0",
-    deps = [
-        "@perimortem//:core",
-        "@perimortem//:memory",
-    ],
-)
-sdks.release(
-    name = "ttx_static",
-    archives = _CUDA_TTX_ARCHIVES,
-    library = "ttx",
-    linkage = "static",
-    project = "TTX",
-    version = "0.5.0",
-    deps = [
-        "@perimortem_static//:core",
-        "@perimortem_static//:memory",
-    ],
-)
-use_repo(sdks, "ttx", "ttx_static")
 
 cuda = use_extension("//build:sdk.bzl", "dependencies")
 use_repo(cuda, "cuda_cudart_linux", "cuda_cudart_windows", "cuda_nvrtc_linux", "cuda_nvrtc_windows", "libcufft_linux", "libcufft_windows")

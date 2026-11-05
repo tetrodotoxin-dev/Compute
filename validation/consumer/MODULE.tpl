@@ -1,21 +1,6 @@
 # Copyright (c) 2023-present Matt Kaes and contributors
 
 sdks.release(
-    name = "cuda",
-    archives = {archives},
-    library = "cuda",
-    linkage = "{linkage}",
-    project = "Compute",
-    version = "{version}",
-    deps = [
-        "@perimortem{suffix}//:core",
-        "@perimortem{suffix}//:memory",
-        "@ttx{suffix}//:graph",
-    ],
-)
-use_repo(sdks, "cuda")
-
-sdks.release(
     name = "compute",
     archives = {compute_archives},
     library = "compute",
@@ -23,9 +8,9 @@ sdks.release(
     project = "Compute",
     version = "{version}",
     deps = [
-        "@perimortem{suffix}//:core",
-        "@perimortem{suffix}//:memory",
-        "@ttx{suffix}//:graph",
+        {coherence_dependency}
+        "{perimortem}",
+        "{ttx}",
     ],
 )
 use_repo(sdks, "compute")
@@ -37,10 +22,17 @@ sdks.release(
     linkage = "{linkage}",
     project = "Compute",
     version = "{version}",
-    deps = [
-        "@perimortem{suffix}//:core",
-        "@perimortem{suffix}//:memory",
-        "@ttx{suffix}//:graph",
-    ],
+    deps = ["@compute//:compute"],
 )
 use_repo(sdks, "cpu")
+
+sdks.release(
+    name = "cuda",
+    archives = {archives},
+    library = "cuda",
+    linkage = "{linkage}",
+    project = "Compute",
+    version = "{version}",
+    deps = ["@compute//:compute"],
+)
+use_repo(sdks, "cuda")
